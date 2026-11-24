@@ -12,7 +12,7 @@ export function NotFoundPage() {
 
   return (
     <div className={page.page}>
-      <Nameplate eyebrow="// erro" title="Página não encontrada" />
+      <Nameplate eyebrow="Navegação" title="Página não encontrada" />
       <EmptyState
         icon={<Compass size={28} />}
         title={`Não existe rota para "${location.pathname}"`}

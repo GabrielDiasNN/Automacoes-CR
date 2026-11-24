@@ -1,0 +1,221 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.trigger {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--red, #e5484d);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--fw-bold, 700);
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + var(--sp-2, 8px));
+  left: 0;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(480px, 75vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-up);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg, 8px);
+  box-shadow: var(--shadow-pop, 0 12px 32px rgba(0, 0, 0, 0.45));
+  z-index: var(--z-drawer, 60);
+  overflow: hidden;
+}
+
+@media (max-width: 560px) {
+  .popover {
+    position: fixed;
+    top: var(--topbar-h, 52px);
+    left: var(--sp-3, 12px);
+    right: var(--sp-3, 12px);
+    width: auto;
+  }
+}
+
+@media (max-width: 400px) {
+  .popover {
+    top: 96px;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2, 8px);
+  padding: var(--sp-3, 12px) var(--sp-4, 16px);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.titleGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2, 8px);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-small, 0.8125rem);
+  font-weight: var(--fw-semibold, 600);
+  color: var(--text-hi);
+}
+
+.countPill {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label, 0.7rem);
+  color: var(--text-mid);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius, 4px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-mid);
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  background: var(--surface-up);
+  color: var(--text-hi);
+  border-color: var(--border);
+}
+
+.body {
+  overflow-y: auto;
+  padding: var(--sp-2, 8px) 0;
+}
+
+.section {
+  padding: var(--sp-1, 4px) 0;
+}
+
+.section + .section {
+  border-top: 1px solid var(--border);
+}
+
+.sectionTitle {
+  margin: 0;
+  padding: var(--sp-2, 8px) var(--sp-4, 16px) var(--sp-1, 4px);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label, 0.7rem);
+  font-weight: var(--fw-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-lo);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.itemBtn {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2, 8px);
+  padding: var(--sp-2, 8px) var(--sp-4, 16px);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-hi);
+  transition: background var(--dur-fast, 120ms) var(--ease, ease);
+}
+
+.itemBtn:hover,
+.itemBtn:focus-visible {
+  background: var(--surface);
+  outline: none;
+}
+
+.itemBtn:focus-visible {
+  box-shadow: inset 2px 0 0 var(--cyan);
+}
+
+.itemIcon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: inline-flex;
+}
+
+.toneDanger {
+  color: var(--red, #e5484d);
+}
+
+.toneWarn {
+  color: var(--amber, #e8a317);
+}
+
+.itemContent {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.itemTitle {
+  font-size: var(--fs-small, 0.8125rem);
+  font-weight: var(--fw-medium, 500);
+  color: var(--text-hi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemMeta {
+  font-size: var(--fs-label, 0.75rem);
+  color: var(--text-mid);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: var(--sp-6, 24px) var(--sp-4, 16px);
+  text-align: center;
+  color: var(--text-mid);
+  font-size: var(--fs-small, 0.8125rem);
+}
+
+.staleNotice {
+  margin: var(--sp-1, 4px) var(--sp-3, 12px);
+  padding: var(--sp-2, 8px) var(--sp-3, 12px);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--amber-tint);
+  color: var(--amber);
+  font-size: var(--fs-label, 0.7rem);
+}

@@ -597,3 +597,15 @@ def test_queue_stalled_usa_limiar_de_uma_hora() -> None:
     # na mesma resposta. Uma RUNNING de 90 min deve acender "warn".
     assert _queue_stalled_check(90 * 60)["status"] == "warn"
     assert _queue_stalled_check(30 * 60)["status"] == "ok"
+
+
+def test_cors_preflight_permite_metodo_patch(client: Any) -> None:
+    res = client.options(
+        "/api/automations/1",
+        headers={
+            "Origin": "http://localhost:8000",
+            "Access-Control-Request-Method": "PATCH",
+        },
+    )
+    assert res.status_code == 200
+    assert "PATCH" in res.headers.get("access-control-allow-methods", "")

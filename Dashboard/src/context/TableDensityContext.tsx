@@ -12,9 +12,10 @@ interface TableDensityContextValue {
 const TableDensityContext = createContext<TableDensityContextValue | null>(null);
 
 export function TableDensityProvider({ children }: { children: ReactNode }) {
-  const [density, setDensity] = useState<TableDensity>(
-    () => (localStorage.getItem(STORAGE_KEY) as TableDensity | null) ?? "comfortable",
-  );
+  const [density, setDensity] = useState<TableDensity>(() => {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw === "compact" ? "compact" : "comfortable";
+  });
 
   const toggleDensity = useCallback(() => {
     setDensity((prev) => {

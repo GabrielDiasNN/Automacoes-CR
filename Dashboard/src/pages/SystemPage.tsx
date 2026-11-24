@@ -34,6 +34,7 @@ import {
   type Column,
 } from "../components/ui";
 import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
+import { OrquestradorSubNav } from "../components/OrquestradorSubNav";
 import { useAction } from "../hooks/useAction";
 import { healthTone, healthLabel } from "../lib/status";
 import { extractTimeBr, formatAge } from "../lib/format";
@@ -186,8 +187,9 @@ export function SystemPage() {
 
   return (
     <div className={page.page}>
+      <OrquestradorSubNav />
       <Nameplate
-        eyebrow="// administração"
+        eyebrow="Orquestrador & Sistema · Infraestrutura e Auditoria"
         title="Sistema"
         actions={
           <div className={page.toolbar}>
@@ -231,9 +233,11 @@ export function SystemPage() {
       <div className={page.split}>
         <Card
           label="tendência · fila (24h)"
-          actions={<FreshnessTag lastUpdated={historyUpdated} error={history && historyError ? historyError : null} />}
+          actions={<FreshnessTag lastUpdated={historyUpdated} error={historyError} />}
         >
-          {chart.count > 1 ? (
+          {historyError && !history ? (
+            <ErrorState message={historyError} />
+          ) : chart.count > 1 ? (
             <TimeSeries xLabels={chart.xLabels} lines={chart.queueLines} height={180} />
           ) : (
             <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>
@@ -243,9 +247,11 @@ export function SystemPage() {
         </Card>
         <Card
           label="tendência · WAL (24h)"
-          actions={<FreshnessTag lastUpdated={historyUpdated} error={history && historyError ? historyError : null} />}
+          actions={<FreshnessTag lastUpdated={historyUpdated} error={historyError} />}
         >
-          {chart.count > 1 ? (
+          {historyError && !history ? (
+            <ErrorState message={historyError} />
+          ) : chart.count > 1 ? (
             <TimeSeries xLabels={chart.xLabels} lines={chart.walLine} height={180} />
           ) : (
             <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-small)", color: "var(--text-lo)" }}>
@@ -397,7 +403,7 @@ export function SystemPage() {
         padded={auditRows.length === 0}
         actions={
           <div className={page.toolbar}>
-            <FreshnessTag lastUpdated={auditUpdated} error={auditLog && auditError ? auditError : null} />
+            <FreshnessTag lastUpdated={auditUpdated} error={auditError} />
             <Select
               value={auditLimit}
               onChange={(e) => setAuditLimit(Number(e.target.value))}
@@ -412,7 +418,9 @@ export function SystemPage() {
           </div>
         }
       >
-        {auditRows.length === 0 ? (
+        {auditError && !auditLog ? (
+          <ErrorState message={auditError} />
+        ) : auditRows.length === 0 ? (
           <EmptyState
             icon={<History size={20} />}
             title="nenhum evento de auditoria registrado ainda"
@@ -476,7 +484,7 @@ export function SystemPage() {
           >
             Recarregar agendador
           </Button>
-          <Button variant="danger" icon={<Trash2 size={14} />} onClick={() => setConfirmPurge(true)}>
+          <Button variant="danger" icon={<Trash2 size={14} />} disabled={busy === "purge"} onClick={() => setConfirmPurge(true)}>
             Purge execuções
           </Button>
         </div>

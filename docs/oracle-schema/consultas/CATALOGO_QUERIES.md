@@ -10,11 +10,11 @@
 
 ## Resumo
 
-**229 arquivos `.sql` em 13 pastas.**
+**228 arquivos `.sql` em 13 pastas.**
 
 | Status | Arquivos |
 |---|---|
-| ✅ validada | 215 |
+| ✅ validada | 214 |
 | referência (DDL de view, não executada) | 10 |
 | DML restrito (nunca executado) | 4 |
 
@@ -22,7 +22,7 @@ Amostra vazia: 8 consulta(s) validadas não retornaram linhas na janela/filtros 
 
 ## Inventário por pasta
 
-### 01_beneficiamento_tingimento (41)
+### 01_beneficiamento_tingimento (40)
 
 | Arquivo | Objetivo | Categoria | Binds | Status Oracle | Amostra | Tempo |
 |---|---|---|---|---|---|---|
@@ -40,7 +40,6 @@ Amostra vazia: 8 consulta(s) validadas não retornaram linhas na janela/filtros 
 | `bnf_monitora_montagem_de_lote.sql` | Monitora montagem de lote | Tingimento e Tinturaria | — | ✅ validada | com dados | 172 ms |
 | `bnf_monitora_tingimento_e_reprocesso.sql` | Monitora - Tingimento e Reprocesso (KPI Consolidado Oficial) | KPI Consolidado Executivo / Gestão Fabril e Qualidade | — | ✅ validada | com dados | 383 ms |
 | `bnf_monitora_tingimento_e_reprocesso_detalhado.sql` | Monitora - Tingimento e Reprocesso (Auditoria Analítica Detalhada por OB) | Auditoria Analítica Detalhada / Diagnóstico e Rastreabilidade Individual de OBs | — | ✅ validada | com dados | 328 ms |
-| `bnf_monitoramento_atributos_produtos_quimicos.sql` | Monitorar Atributo Estoque (Produto Químico) | SELECT (Consulta Somente Leitura) | — | ✅ validada | com dados | 62 ms |
 | `bnf_monitoramento_maquinas_tingimento.sql` | Monitoramento Máquinas de Tingimento | Tingimento e Tinturaria | — | ✅ validada | com dados | 8 ms |
 | `bnf_monitoramento_previsao_vs_realizado_tingimento.sql` | Monitoramento mensal de previsões de tingimento versus realizado | SELECT (Template Analítico / Operacional) | — | ✅ validada | com dados | 523 ms |
 | `bnf_ob_fases_seleciona_ultima_sequencia_da_fase.sql` | OB_FASES - seleciona última sequência da fase | Tingimento e Tinturaria | — | ✅ validada | com dados | 1609 ms |

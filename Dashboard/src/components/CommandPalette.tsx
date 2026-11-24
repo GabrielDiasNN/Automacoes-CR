@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Search, Workflow } from "lucide-react";
+import { ClipboardList, Search, Workflow } from "lucide-react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useOverlayDismiss } from "../hooks/useOverlayDismiss";
 import { useAsyncResource } from "../hooks/useAsyncResource";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
-import { orchestratorApi, type Automation } from "../api/orchestrator";
+import { orchestratorApi, type Automation, type PromovidaResumo } from "../api/orchestrator";
 import styles from "./CommandPalette.module.css";
 
 interface NavItem {
@@ -23,7 +23,8 @@ interface CommandPaletteProps {
 
 type PaletteEntry =
   | { kind: "nav"; key: string; label: string; icon: ReactNode; to: string }
-  | { kind: "automation"; key: string; label: string; automation: Automation };
+  | { kind: "automation"; key: string; label: string; automation: Automation }
+  | { kind: "pcp"; key: string; label: string; item: PromovidaResumo };
 
 /** Busca global (Ctrl+K) — pula direto para uma tela ou acha uma automação pelo nome. */
 export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps) {
@@ -35,13 +36,17 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   const [selected, setSelected] = useState(0);
   const listboxId = useId();
   const debouncedQuery = useDebouncedValue(query, 250);
-  const buscaAtiva = open && debouncedQuery.trim().length >= 2;
+  const buscaAtiva = open && query.trim().length >= 2 && debouncedQuery.trim().length >= 2;
 
   useFocusTrap(boxRef, open, onClose);
   useOverlayDismiss(overlayRef, open, onClose);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQuery("");
+      setSelected(0);
+      return;
+    }
     setQuery("");
     setSelected(0);
     const id = requestAnimationFrame(() => inputRef.current?.focus());
@@ -55,36 +60,60 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   // Erro descartado deliberadamente (`?? []`): a paleta sem resultados de
   // automação ainda funciona para navegação por rota — não é um ErrorState
   // que caiba num popover de busca.
-  const { data: automationResults } = useAsyncResource(buscaAtiva ? fetchAutomations : null, [debouncedQuery, open]);
+  const { data: automationResults } = useAsyncResource(buscaAtiva ? fetchAutomations : null, [debouncedQuery, buscaAtiva]);
   const automations = useMemo(() => automationResults ?? [], [automationResults]);
+
+  const fetchPromovidas = useCallback(
+    (signal?: AbortSignal) => orchestratorApi.getPromovidas(signal).then((r) => r.items).catch(() => []),
+    [],
+  );
+  const { data: promovidasResults } = useAsyncResource(buscaAtiva ? fetchPromovidas : null, [buscaAtiva]);
 
   const entries: PaletteEntry[] = useMemo(() => {
     const q = query.trim().toLowerCase();
     const navEntries: PaletteEntry[] = navItems
       .filter((n) => !q || n.label.toLowerCase().includes(q))
       .map((n) => ({ kind: "nav" as const, key: `nav-${n.to}`, label: n.label, icon: n.icon, to: n.to }));
-    const autoEntries: PaletteEntry[] = automations.map((a) => ({
-      kind: "automation" as const,
-      key: `auto-${a.id}`,
-      label: a.name,
-      automation: a,
-    }));
-    return [...navEntries, ...autoEntries];
-  }, [navItems, query, automations]);
+    const autoEntries: PaletteEntry[] = q.length >= 2
+      ? automations.map((a) => ({
+          kind: "automation" as const,
+          key: `auto-${a.id}`,
+          label: a.name,
+          automation: a,
+        }))
+      : [];
+    const pcpEntries: PaletteEntry[] = q.length >= 2
+      ? (promovidasResults ?? [])
+          .filter(
+            (p) =>
+              p.nome.toLowerCase().includes(q) ||
+              (p.titulo ?? "").toLowerCase().includes(q) ||
+              (p.codigo ?? "").toLowerCase().includes(q) ||
+              (p.setor ?? "").toLowerCase().includes(q),
+          )
+          .slice(0, 5)
+          .map((p) => ({
+            kind: "pcp" as const,
+            key: `pcp-${p.slug}`,
+            label: p.codigo ? `${p.codigo} · ${p.nome}` : p.nome,
+            item: p,
+          }))
+      : [];
+    return [...navEntries, ...pcpEntries, ...autoEntries];
+  }, [navItems, query, automations, promovidasResults]);
 
   useEffect(() => {
     setSelected(0);
-  }, [entries.length]);
+  }, [query, entries.length]);
 
   if (!open) return null;
 
   const activate = (entry: PaletteEntry) => {
-    // `void`: `navigate` (react-router 7) devolve Promise que não interessa aqui.
     if (entry.kind === "nav") {
       void navigate(entry.to);
+    } else if (entry.kind === "pcp") {
+      void navigate(`/pcp?slug=${encodeURIComponent(entry.item.slug)}`);
     } else {
-      // Leva o nome escolhido para a tela de Automações, que rola até o card e
-      // o destaca (antes: ia sempre para /automacoes, ignorando a automação).
       void navigate(`/automacoes?focus=${encodeURIComponent(entry.automation.name)}`);
     }
     onClose();
@@ -105,13 +134,13 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
           <input
             ref={inputRef}
             className={styles.input}
-            placeholder="Ir para uma tela ou buscar automação…"
+            placeholder="Ir para uma tela, consulta PCP ou automação…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setSelected((s) => Math.min(s + 1, entries.length - 1));
+                setSelected((s) => Math.min(s + 1, Math.max(0, entries.length - 1)));
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setSelected((s) => Math.max(s - 1, 0));
@@ -130,7 +159,7 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
             aria-expanded={entries.length > 0}
             aria-controls={listboxId}
             aria-autocomplete="list"
-            aria-activedescendant={entries[selected]?.key}
+            aria-activedescendant={entries[selected] ? `${listboxId}-${entries[selected].key}` : undefined}
           />
           <kbd className={styles.kbd}>Esc</kbd>
         </div>
@@ -149,15 +178,19 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
                 <button
                   id={`${listboxId}-${entry.key}`}
                   type="button"
+                  tabIndex={-1}
                   className={`${styles.item} ${i === selected ? styles.itemActive : ""}`}
                   onMouseEnter={() => setSelected(i)}
                   onClick={() => activate(entry)}
                   role="option"
                   aria-selected={i === selected}
                 >
-                  <span className={styles.itemIcon}>{entry.kind === "nav" ? entry.icon : <Workflow size={15} />}</span>
+                  <span className={styles.itemIcon}>
+                    {entry.kind === "nav" ? entry.icon : entry.kind === "pcp" ? <ClipboardList size={15} /> : <Workflow size={15} />}
+                  </span>
                   <span className={styles.itemLabel}>{entry.label}</span>
                   {entry.kind === "automation" && <span className={styles.itemHint}>automação</span>}
+                  {entry.kind === "pcp" && <span className={styles.itemHint}>consulta / PCP</span>}
                 </button>
               </li>
             ))}

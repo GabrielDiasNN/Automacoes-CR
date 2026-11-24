@@ -1,0 +1,63 @@
+.tablist {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--text-mid);
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.tab:hover {
+  color: var(--text-hi);
+  background: var(--surface);
+}
+
+.tabActive {
+  color: var(--cyan-bright);
+  border-bottom-color: var(--cyan);
+  font-weight: var(--fw-semibold);
+}
+
+.icon {
+  display: inline-flex;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-up);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  color: var(--text-mid);
+}
+
+.tabActive .badge {
+  background: var(--cyan-tint);
+  border-color: var(--cyan-glow);
+  color: var(--cyan-bright);
+}

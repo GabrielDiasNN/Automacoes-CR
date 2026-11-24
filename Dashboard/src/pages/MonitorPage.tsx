@@ -16,6 +16,7 @@ import {
   StatusTag,
 } from "../components/ui";
 import { TimeSeries, type SeriesLine } from "../components/ui/TimeSeries";
+import { OrquestradorSubNav } from "../components/OrquestradorSubNav";
 import selectStyles from "../components/ui/Select.module.css";
 import { healthTone, healthLabel, type Tone } from "../lib/status";
 import { extractTimeBr } from "../lib/format";
@@ -298,7 +299,10 @@ export function MonitorPage() {
   const cutoff7d = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    return d.toISOString().slice(0, 10);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
   }, []);
   const { errorsTrendHint, errorsTrendTone, currentWeekErrors } = useMemo(() => {
     const currentWeekErrors = dailyItems.filter((d) => d.date >= cutoff7d).reduce((sum, d) => sum + d.errors, 0);
@@ -333,8 +337,9 @@ export function MonitorPage() {
 
   return (
     <div className={page.page}>
+      <OrquestradorSubNav />
       <Nameplate
-        eyebrow="// operação"
+        eyebrow="Orquestrador & Sistema · Telemetria ao Vivo"
         title="Monitor"
         actions={
           <StatusTag tone={wsTone} dot pulse={status === "connecting"}>

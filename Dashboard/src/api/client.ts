@@ -113,8 +113,8 @@ export function qs(params: Record<string, string | number | boolean | undefined 
   return s ? `?${s}` : "";
 }
 
-/** POST/PUT com corpo JSON opcional: o contrato é o mesmo, só muda o método. */
-function jsonRequest<T>(method: "POST" | "PUT", path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+/** POST/PUT/PATCH com corpo JSON opcional: o contrato é o mesmo, só muda o método. */
+function jsonRequest<T>(method: "POST" | "PUT" | "PATCH", path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   return request<T>(path, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -133,6 +133,7 @@ export const api = {
   getBlob: (path: string, signal?: AbortSignal) => requestBlob(path, { signal: signal ?? null }),
   post: <T>(path: string, body?: unknown, signal?: AbortSignal) => jsonRequest<T>("POST", path, body, signal),
   put: <T>(path: string, body?: unknown, signal?: AbortSignal) => jsonRequest<T>("PUT", path, body, signal),
+  patch: <T>(path: string, body?: unknown, signal?: AbortSignal) => jsonRequest<T>("PATCH", path, body, signal),
   delete: <T>(path: string, signal?: AbortSignal) =>
     request<T>(path, { method: "DELETE", signal: signal ?? null }),
 };

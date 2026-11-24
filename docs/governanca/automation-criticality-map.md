@@ -41,6 +41,7 @@ A tabela abaixo consolida a governança, cadência e prazos operacionais das aut
 | **`CP-07`** | **[Fila Maquina Tingimento](../runbooks/fila-maquina-tingimento-runbook.md)** | **💡 MÉDIA** | **60 min** | A cada 2h das 05:00 as 19:00 (Seg-Sex) e 05:00 as 13:00 (Sab) [modo sombra] | PCP / Tinturaria | Falta de visibilidade da fila programada e UPs atrasadas por máquina de tingimento. |
 | **`CP-08`** | **[Sincronismo Malha Ribana](../runbooks/sincronismo-malha-ribana-runbook.md)** | **💡 MÉDIA** | **120 min** | Seg-Sab as 07:00 e 14:00 [modo sombra] | PCP / Lojas | Descasamento entre malha principal e ribana travando expedição das lojas. |
 | **`CP-09`** | **[Sentinela Preco Zero Pedidos](../runbooks/sentinela-preco-zero-pedidos-runbook.md)** | **⚠️ ALTA** | **60 min** | A cada 2h das 07:00 as 19:00 (Seg-Sex) [modo sombra] | Comercial / Faturamento | Pedidos em aberto cadastrados com preço simbólico R$ 0,01 chegam ao faturamento. |
+| **`CP-10`** | **[Quimicos Atributo 4](../runbooks/quimicos-atributo-4-runbook.md)** | **⚠️ ALTA** | **60 min** | Seg-Sex a cada 1h das 07:00 as 17:00 [modo sombra] | Laboratorio de Receitas / Tinturaria / Almoxarifado | Entrada de produto químico no depósito 20 com atributo 4 (sem lote/concentração) prejudica a emissão e o controle de receitas. |
 
 ---
 

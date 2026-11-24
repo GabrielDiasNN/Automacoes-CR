@@ -145,15 +145,6 @@
       "validator_version": "2.2.0",
       "cancelled": false
     },
-    "01_beneficiamento_tingimento/bnf_monitoramento_atributos_produtos_quimicos.sql": {
-      "status": "validated",
-      "sample_rows": 1,
-      "execute_ms": 62.0,
-      "sha8": "7b7f3b2f",
-      "validated_at": "2026-11-20",
-      "validator_version": "2.2.0",
-      "cancelled": false
-    },
     "01_beneficiamento_tingimento/bnf_monitoramento_maquinas_tingimento.sql": {
       "status": "validated",
       "sample_rows": 1,

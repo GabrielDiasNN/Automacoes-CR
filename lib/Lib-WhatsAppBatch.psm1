@@ -303,7 +303,10 @@ function Invoke-WhatsAppDaemonBatch {
         $lidos = Get-Content -LiteralPath $BatchInputFile -Raw -Encoding UTF8 | ConvertFrom-Json
         $itens = if ($null -ne $lidos) { @($lidos) } else { @() }
         $chatId = if ($ChatTarget.Contains("@")) { $ChatTarget } else { (($ChatTarget -replace '\D', '') + "@c.us") }
-        $corpo = [pscustomobject]@{ exec_id = $ExecId; client_id = $ClientId; chat_id = $chatId; items = $itens } | ConvertTo-Json -Depth 6
+        # No PowerShell 5.1, ConvertTo-Json em propriedade de objeto achata array de 1 elemento para objeto.
+        $itensJson = if (@($itens).Count -gt 0) { ConvertTo-Json -InputObject @($itens) -Depth 6 -Compress } else { "[]" }
+        $cabecalhoJson = ([pscustomobject]@{ exec_id = $ExecId; client_id = $ClientId; chat_id = $chatId } | ConvertTo-Json -Compress).TrimEnd('}')
+        $corpo = "$cabecalhoJson,`"items`":$itensJson}"
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($corpo)
 
         $status = 0
@@ -327,7 +330,7 @@ function Invoke-WhatsAppDaemonBatch {
         if (-not [string]::IsNullOrWhiteSpace($texto)) {
             try {
                 $objeto = $texto | ConvertFrom-Json
-                if ($null -ne $objeto.PSObject.Properties["results"]) { $resultados = @($objeto.results) }
+                if ($null -ne $objeto.PSObject.Properties["results"] -and $null -ne $objeto.results) { $resultados = @($objeto.results) }
             }
             catch [System.Exception] {
                 $resultados = $null
@@ -339,7 +342,7 @@ function Invoke-WhatsAppDaemonBatch {
         }
 
         if ($status -eq 200) {
-            if ($null -eq $resultados -or $resultados.Count -eq 0) { return 4 }
+            if ($null -eq $resultados -or @($resultados).Count -eq 0) { return 4 }
             $temFalha = @($resultados | Where-Object { -not (Get-JsonPropValue $_ "success") }).Count -gt 0
             if ($temFalha) { return 4 }
             return 0

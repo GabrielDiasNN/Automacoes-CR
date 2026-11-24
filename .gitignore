@@ -180,8 +180,6 @@ Backups/
 # Scratch local de investigação e quarentena
 scratch/
 _tmp/
-# Estado de loops agenticos (skill loop-agentico) — local, por sessao
-.loop-state/
 # Diario de progresso do loop em andamento — removido ao fechar a rodada
 # (precedente no CHANGELOG), nunca versionado.
 docs/progress.md
@@ -214,7 +212,6 @@ OBs Paradas Fase/obs_result.json
 OBs Paradas Fase/obs_state.json
 OBs Paradas Fase/obs_state.json.tmp
 OBs Paradas Fase/obs_seen_state.json
-OBs Paradas Fase/message.txt
 OBs Paradas Fase/delivery_state.json
 OBs Paradas Fase/.wwebjs_cache/
 OBs Paradas Fase/images/
@@ -225,7 +222,6 @@ OBs Fluxo Sem Tingimento/ofst_result.json
 OBs Fluxo Sem Tingimento/ofst_state.json
 OBs Fluxo Sem Tingimento/ofst_state.json.tmp
 OBs Fluxo Sem Tingimento/ofst_state.json.backup-*
-OBs Fluxo Sem Tingimento/message.txt
 OBs Fluxo Sem Tingimento/card.png
 OBs Fluxo Sem Tingimento/card_*.png
 OBs Fluxo Sem Tingimento/cards_manifest.json
@@ -235,7 +231,6 @@ OBs Restricao Branco/orb_result.json
 OBs Restricao Branco/orb_state.json
 OBs Restricao Branco/orb_state.json.tmp
 OBs Restricao Branco/orb_state.json.backup-*
-OBs Restricao Branco/message.txt
 OBs Restricao Branco/card.png
 OBs Restricao Branco/card_*.png
 OBs Restricao Branco/cards_manifest.json
@@ -246,14 +241,13 @@ OBs Restricao Branco/batch_result.json
 .npm-cache-codex/
 
 # VS Code — configurações de máquina (não versionar)
-.vscode/
+.vscode/*
 !.vscode/extensions.json
 
 # Saída de testes Pester (-CI)
 testResults.xml
 
-# Marcadores de execução de gate gravados por .claude/hooks/Register-GateRun.ps1
-.claude/.state/
+# Configs de teste locais do Orquestrador
 Orchestrator/tests/test/automation.manifest.json
 Orchestrator/tests/test/whatsapp-config.json
 
@@ -264,7 +258,6 @@ Tools/evidencias/
 Consultas Promovidas/snapshots/
 Consultas Promovidas/*/seen_state.json
 Consultas Promovidas/*/seen_state.json.tmp
-Consultas Promovidas/*/message.txt
 Consultas Promovidas/*/card.png
 Consultas Promovidas/*/card_*.png
 Consultas Promovidas/*/cards_manifest.json

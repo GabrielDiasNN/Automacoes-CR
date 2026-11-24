@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ExecutionStatus } from "../api/orchestrator";
 import {
   criticalityTone,
+  executionLabel,
   executionTone,
   healthLabel,
   healthTone,
@@ -189,5 +190,22 @@ describe("healthLabel", () => {
 
   it("retorna o próprio status quando não há tradução mapeada", () => {
     expect(healthLabel("custom_status")).toBe("custom_status");
+  });
+});
+
+describe("executionLabel", () => {
+  it("traduz estados principais de execução para português", () => {
+    expect(executionLabel("SUCCESS")).toBe("Sucesso");
+    expect(executionLabel("ERROR")).toBe("Erro");
+    expect(executionLabel("RUNNING")).toBe("Executando");
+    expect(executionLabel("PENDING")).toBe("Na fila");
+    expect(executionLabel("TIMEOUT")).toBe("Tempo esgotado");
+    expect(executionLabel("EXPIRED")).toBe("Expirado");
+    expect(executionLabel("TERMINATED")).toBe("Encerrado");
+  });
+
+  it("retorna travessão para vazio e preserva fallback desconhecido", () => {
+    expect(executionLabel(null)).toBe("—");
+    expect(executionLabel("OUTRO")).toBe("OUTRO");
   });
 });

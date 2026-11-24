@@ -173,3 +173,22 @@ export function healthLabel(status: string | null | undefined): string {
   if (!status) return "—";
   return HEALTH_LABEL[status.toLowerCase()] ?? status;
 }
+
+const EXECUTION_STATUS_LABEL: Record<string, string> = {
+  SUCCESS: "Sucesso",
+  ERROR: "Erro",
+  RUNNING: "Executando",
+  PENDING: "Na fila",
+  CLAIMED: "Em andamento",
+  TIMEOUT: "Tempo esgotado",
+  EXPIRED: "Expirado",
+  TERMINATED: "Encerrado",
+  REQUEUED: "Reenfileirado",
+  PARTIAL: "Parcial",
+  FAILED_BY_REBOOT: "Falha (reboot)",
+};
+
+export function executionLabel(status: ExecutionStatus | string | null | undefined): string {
+  if (!status) return "—";
+  return EXECUTION_STATUS_LABEL[status.toUpperCase()] ?? status;
+}

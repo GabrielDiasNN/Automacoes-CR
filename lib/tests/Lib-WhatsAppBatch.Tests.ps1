@@ -182,6 +182,24 @@ Describe "Invoke-WhatsAppDaemonBatch" {
         }
     }
 
+    It "lote com 1 unico item serializa items como array JSON sem achatar para objeto" {
+        $dir = Join-Path $TestDrive ("wa_daemon_single_" + [guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        $entrada = Join-Path $dir "batch_input.json"
+        $saida = Join-Path $dir "batch_result.json"
+        [System.IO.File]::WriteAllText($entrada, '[{"phase_key":"page_01","image_path":"card_01.png","caption":"Unico"}]', (New-Object System.Text.UTF8Encoding $false))
+
+        Mock Invoke-WebRequest -ModuleName Lib-WhatsAppBatch {
+            [pscustomobject]@{ StatusCode = 200; Content = '{"results":[{"phase_key":"page_01","success":true,"error":null}]}' }
+        }
+
+        Invoke-LoteDaemonTeste -Entrada $entrada -Saida $saida | Should -Be 0
+        Should -Invoke Invoke-WebRequest -ModuleName Lib-WhatsAppBatch -Times 1 -Exactly -ParameterFilter {
+            $raw = [System.Text.Encoding]::UTF8.GetString($Body)
+            $raw.Contains('"items":[{')
+        }
+    }
+
     It "HTTP 200 com item success=false devolve 4 (paridade com WhatsApp-Core.js)" {
         $fx = New-FixturesDaemon
         Mock Invoke-WebRequest -ModuleName Lib-WhatsAppBatch {

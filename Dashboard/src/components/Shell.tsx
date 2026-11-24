@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { ClipboardList, Factory, LayoutDashboard, ListChecks, Menu, Monitor, Moon, Radio, Rows3, Rows4, Search, Server, Sun, Workflow, X } from "lucide-react";
+import { ClipboardList, Factory, LayoutDashboard, ListChecks, LogOut, Menu, Monitor, Moon, Radio, Rows3, Rows4, Search, Server, Sun, Workflow, X } from "lucide-react";
 import { useApiKeyContext } from "../context/ApiKeyContext";
 import { useTableDensity } from "../context/TableDensityContext";
 import { nextTheme, useTheme, type Theme } from "../context/ThemeContext";
@@ -8,6 +8,7 @@ import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { mediaMaxWidth } from "../styles/breakpoints";
 import { StatusBar } from "./StatusBar";
+import { AlertsBellPopover } from "./AlertsBellPopover";
 import { CommandPalette } from "./CommandPalette";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { IconButton, Loading } from "./ui";
@@ -18,16 +19,27 @@ interface NavItem {
   label: string;
   icon: ReactNode;
   section?: string;
+  matchPaths?: string[];
 }
 
 const NAV: NavItem[] = [
-  { to: "/painel", label: "Painel", icon: <LayoutDashboard size={16} />, section: "Operação" },
-  { to: "/execucoes", label: "Execuções", icon: <ListChecks size={16} /> },
-  { to: "/monitor", label: "Monitor", icon: <Radio size={16} /> },
-  { to: "/beneficiamento", label: "Beneficiamento", icon: <Factory size={16} />, section: "Análise" },
-  { to: "/pcp", label: "PCP & Consultas", icon: <ClipboardList size={16} /> },
-  { to: "/automacoes", label: "Automações", icon: <Workflow size={16} />, section: "Administração" },
-  { to: "/sistema", label: "Sistema", icon: <Server size={16} /> },
+  { to: "/painel", label: "Visão Geral", icon: <LayoutDashboard size={16} />, section: "Gestão & BI" },
+  { to: "/beneficiamento", label: "Produção & Beneficiamento", icon: <Factory size={16} /> },
+  { to: "/pcp", label: "Central de Consultas & PCP", icon: <ClipboardList size={16} /> },
+  {
+    to: "/automacoes",
+    label: "Orquestrador & Sistema",
+    icon: <Workflow size={16} />,
+    section: "Operação",
+    matchPaths: ["/automacoes", "/execucoes", "/monitor", "/sistema"],
+  },
+];
+
+const PALETTE_NAV: NavItem[] = [
+  ...NAV,
+  { to: "/execucoes", label: "Execuções & Resultados", icon: <ListChecks size={16} /> },
+  { to: "/monitor", label: "Console & Telemetria", icon: <Radio size={16} /> },
+  { to: "/sistema", label: "Saúde & Manutenção", icon: <Server size={16} /> },
 ];
 
 const THEME_LABEL: Record<Theme, string> = { system: "sistema", light: "claro", dark: "escuro" };
@@ -74,7 +86,6 @@ export function Shell() {
       <a href="#conteudo" className={styles.skip}>
         Pular para o conteúdo
       </a>
-      <div className={`hazard ${styles.brandRail}`} aria-hidden="true" />
 
       <div className={styles.frame}>
         <aside
@@ -85,7 +96,7 @@ export function Shell() {
           <div className={styles.wordmark}>
             <div>
               <div className={styles.brand}>ORQUESTRADOR</div>
-              <div className={styles.tagline}>// sala de instrumentação</div>
+              <div className={styles.tagline}>Produção · PCP · Automações</div>
             </div>
             <IconButton className={styles.railClose} onClick={() => setOpen(false)} aria-label="Fechar menu de navegação">
               <X size={18} />
@@ -93,24 +104,28 @@ export function Shell() {
           </div>
 
           <nav className={styles.nav} aria-label="Navegação principal">
-            {NAV.map((item) => (
-              <div key={item.to}>
-                {item.section && <div className={styles.section}>{item.section}</div>}
-                <NavLink
-                  to={item.to}
-                  className={({ isActive }) => `${styles.link} ${isActive ? styles.linkActive : ""}`}
-                  onClick={() => setOpen(false)}
-                >
-                  <span className={styles.linkIcon}>{item.icon}</span>
-                  {item.label}
-                </NavLink>
-              </div>
-            ))}
+            {NAV.map((item) => {
+              const matchesGroup = item.matchPaths?.some((p) => location.pathname.startsWith(p)) ?? false;
+              return (
+                <div key={item.to}>
+                  {item.section && <div className={styles.section}>{item.section}</div>}
+                  <NavLink
+                    to={item.to}
+                    className={({ isActive }) => `${styles.link} ${isActive || matchesGroup ? styles.linkActive : ""}`}
+                    onClick={() => setOpen(false)}
+                  >
+                    <span className={styles.linkIcon}>{item.icon}</span>
+                    {item.label}
+                  </NavLink>
+                </div>
+              );
+            })}
           </nav>
 
           <div className={styles.railFoot}>
             <button className={styles.logout} onClick={clearKey}>
-              $ logout
+              <LogOut size={13} aria-hidden="true" />
+              <span>Encerrar sessão</span>
             </button>
           </div>
         </aside>
@@ -148,6 +163,7 @@ export function Shell() {
             >
               {THEME_ICON[theme]}
             </IconButton>
+            <AlertsBellPopover />
             <StatusBar />
           </header>
 
@@ -166,7 +182,7 @@ export function Shell() {
         </div>
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} navItems={NAV} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} navItems={PALETTE_NAV} />
     </div>
   );
 }

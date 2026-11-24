@@ -22,7 +22,7 @@ export { Sparkline, RatioBar } from "./MiniViz";
 // arquivo. Os 4 consumidores importam de "./TimeSeries" direto — mantém o
 // uPlot só nos chunks lazy (Monitor, Beneficiamento, Sistema).
 export { DataTable, type Column } from "./DataTable";
-export { Mimico, type QueueLane } from "./Mimico";
+export { Tabs, type TabItem } from "./Tabs";
 export { LogViewer } from "./LogViewer";
 export { FreshnessTag } from "./FreshnessTag";
 export { DescriptionList, KeyValue } from "./DescriptionList";

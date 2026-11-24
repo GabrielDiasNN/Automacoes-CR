@@ -2,6 +2,57 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.129] - 23/11/2026
+
+Correções dos 20 achados de revisão de código (`stateless-code-reviewer`) e adaptação do layout do Dashboard para todas as resoluções (mobile até ultrawide/4K).
+
+### Corrigido
+
+- **Preservação e edição de agendas `cron` (`Dashboard/src/components/ScheduleEditorDrawer.tsx`):** adicionado suporte completo a `schedule_type: "cron"` (padrão APScheduler `mon-fri` / `0=Seg..6=Dom`), preservação segura (`preserved`) de tipos avançados (`monthly`/`once`), preservação de janelas 24×7 e `anchor_time` em `interval`, validação estrita de horários/crons, guarda contra race conditions e exibição somente-leitura de SLA/timeout/retries governados por `automation.manifest.json`.
+- **CORS `PATCH` (`Orchestrator/app/main.py`):** liberado o método `PATCH` em `CORSMiddleware` para `PATCH /api/automations/{id}`.
+- **Timeline 24h com agendas reais (`Dashboard/src/components/ScheduleTimeline24h.tsx`, `ScheduleTimeline24h.module.css`):** expandida a extração de slots para `cron` e `interval`, detecção de congestão por automações distintas, scroll horizontal focável por teclado e contraste WCAG AA corrigido no tema claro.
+- **Cálculo de idade BRT, cards e SQLite (`Orchestrator/app/services/promovidas.py`, `routers/promovidas.py`):** timestamps naive de automações standalone assumem `America/Sao_Paulo`, conexões SQLite em `obter_historico` usam modo somente-leitura (`?mode=ro`) com `contextlib.closing` e tratamento de `sqlite3.Error`, manifesto exclusivo em `_coletar_cards_automacao`, correção dos paths de `OFST-06`/`ORB-07`, exposição de cards PNG de consultas promovidas e `Cache-Control: no-cache` nas respostas PNG.
+- **Segurança, acessibilidade e UX (`ApiKeyGate`, `AlertsBellPopover`, `CardGallery`, `CommandPalette`, `PcpExportUtils`, `PcpPage`, `ExecucoesPage`, `AutomacoesPage`, `MonitorPage`, `SystemPage`, `Tabs`, `usePolling`, `TableDensityContext`, `Start-Orchestrator.ps1`, `Lib-OrchestratorRuntime.psm1`):** limpeza da API Key no input após login/logout, proteção reforçada contra Formula Injection (whitespace/`\n`/`\t`/`\r`/XSS HTML), reset determinístico de filtros e estado de loading em `PcpPage`/`ExecDetailBody`, navegação WAI-ARIA por setas em `Tabs`, neutralização de splash obsoleto em `CommandPalette`, reaproveitamento de blob no `CardLightbox`, encerramento em árvore de `uvicorn`/`python.exe` em timeout/restart e otimização sargável de `RESERVA_RECEITAS` na `CP-10` (`DATAEMISSAO`).
+- **Validação declarativa (`lib/python/promovidas/config.py`, `card.py`):** validação estrita de `slug`, listas `painel.kpis`/`painel.colunas` e guarda para `pendentes` vazio.
+
+### Alterado
+
+- **Layout responsivo multi-resolução (`Dashboard/src/styles/tokens.css`, `page.module.css`, `PcpPage.module.css`, `AutomacoesPage.module.css`, `CardGallery.module.css`, `ScheduleTimeline24h.module.css`):** `--container-max` alterado para `100%` com `minmax(0, ...)` nas grades para aproveitar monitores Full HD, Ultrawide (`2560×1080`) e 4K sem faixas vazias nem overflow horizontal em mobile (`375×812`).
+
+## [1.3.128] - 23/11/2026
+
+Promoção do monitoramento de produtos químicos no depósito `20` com atributo `4` (`CP-10`) no motor declarativo de Consultas Promovidas e exibição de até 6 colunas na legenda de cards WhatsApp.
+
+### Adicionado
+
+- **Consulta Promovida `CP-10` (`Consultas Promovidas/quimicos-atributo-4/`, runbook `docs/runbooks/quimicos-atributo-4-runbook.md`):** promovida via `git mv` a partir de `docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_monitoramento_atributos_produtos_quimicos.sql`, evoluída para retornar `NF` (`SGTPRD.LOTE_ITENS_NOTA_ENTR` / `SGTPRD.GERAMOVIESTOCOMP`), `DEPOSITO`, `REDUZIDO`, `DESCRICAO`, `QUANTIDADE`, `RESERVA_RECEITAS` e `UM` apenas para itens com saldo líquido `> 0` no depósito `20` e `IDGERAATRIESTO = 4`. Agendamento em modo `sombra` (`AUTOMACAO_ALERT_WHATSAPP`) de segunda a sexta, a cada 1h das 07:00 às 17:00, com chave `(NF, REDUZIDO)`, `cor_header` (`#14B8AD`), `colunas_unidade` e renotificação a cada 4h até regularização.
+- **Testes e governança (`Orchestrator/tests/test_consultas_promovidas_smoke.py`, `Orchestrator/tests/test_promovidas_motor_unit.py`, `docs/governanca/automation-criticality-map.md`, `docs/oracle-schema/consultas/CATALOGO_QUERIES.md`):** cobertura do novo contrato `CP-10`, verificação de até 6 colunas na legenda WhatsApp e regeneração do catálogo SQL.
+
+### Alterado
+
+- **Legenda de cards WhatsApp (`lib/python/promovidas/card.py`):** `_formatar_linha_legenda` ampliada de `colunas[:4]` para `colunas[:6]` (e `cols[1:6]` no card PNG), suportando `colunas_unidade` e `cor_header`, e removidos os prefixos `[MODO SOMBRA]` e `[SOMBRA]` da legenda e do título do card PNG.
+- **Serialização de lote único no daemon WhatsApp (`lib/Lib-WhatsAppBatch.psm1`):** corrigido `Invoke-WhatsAppDaemonBatch` para usar `ConvertTo-Json -InputObject @($itens)` e `@($itens).Count` / `@($resultados).Count`, evitando achatamento de array de 1 card em PowerShell 5.1 (HTTP 400 no daemon) e erro de `Count` sob `Set-StrictMode`.
+- **Otimização de contexto e consumo de tokens (`AGENTS.md`, `GEMINI.md`, `CONTEXT.md`, `docs/historico/CONTEXT-history.md`):** eliminadas duplicações entre contratos, substituído o bootstrap amplo por carregamento progressivo sob demanda e arquivados os 42 marcos históricos de maio/2026 de `CONTEXT.md` em `docs/historico/CONTEXT-history.md`.
+
+## [1.3.127] - 22/11/2026
+
+Reconstrução visual, arquitetural e funcional do Dashboard do Orquestrador no padrão **BI / ERP Moderno**, unificando a navegação em 4 áreas principais, trazendo os resultados das 6 automações operacionais para a Central de Consultas & PCP com galeria de cards PNG e expondo controles práticos de agendamento e sandbox.
+
+### Adicionado
+
+- **Snapshots unificados das 6 automações + entrega segura de cards PNG (`Orchestrator/app/services/promovidas.py`, `Orchestrator/app/routers/promovidas.py`):** `GET /api/promovidas/` e `GET /api/promovidas/{slug}/latest` passam a unificar as 9 Consultas Promovidas (`CP-01`..`CP-09`) e os snapshots locais das 6 automações operacionais (`OBP-04`, `OFST-06`, `ORB-07`, `RB-01`, `RE-03`, `MT-02`) sem abrir conexão Oracle em leitura; adicionado `GET /api/promovidas/{slug}/cards/{filename}` (`FileResponse` autenticado com trava anti-path-traversal) para exibir cards PNG gerados no Dashboard.
+- **Componentes BI / ERP e controles operacionais (`Dashboard/src/components/`):** adicionados `ui/Tabs.tsx` (abas internas acessíveis), `OrquestradorSubNav.tsx` (sub-navegação unificada da área de Orquestração), `CardGallery.tsx` (galeria de cards PNG via Blob autenticado) e `ScheduleEditorDrawer.tsx` (editor visual de recorrência/SLA/timeout/retries com simulação `POST /api/system/schedule/preview` e salvamento via `PATCH /api/automations/{id}`).
+- **Controles práticos em Automações e Execuções (`AutomacoesPage.tsx`, `ExecucoesPage.ExecDetailBody.tsx`):** chave rápida de Modo Teste (`Sandbox`) por automação e global, atalho direto para resultados/cards e aba `"Resultado de Negócio & Cards PNG"` ao lado do log técnico no drawer de detalhe de execução.
+
+### Alterado
+
+- **Navegação enxugada para 4 áreas principais (`Shell.tsx`, `tokens.css`):** `Visão Geral` (`/painel`, Command Center com KPIs de Beneficiamento + Radar de PCP/Alertas + Fila/Execuções), `Produção & Beneficiamento` (`/beneficiamento`, reorganizado em 3 abas internas para eliminar rolagem longa), `Central de Consultas & PCP` (`/pcp`, catálogo unificado com filtro por origem, ordenação clicável, exportação CSV, galeria PNG, histórico e disparo 1-clique) e `Orquestrador & Sistema` (`/automacoes`, `/execucoes`, `/monitor`, `/sistema` sincronizados por sub-navegação).
+- **Testes e driver (`Orchestrator/tests/test_promovidas_api.py`, `test_e2e_dashboard.py`, `Dashboard/src/__tests__/PcpPage.test.tsx`, `.claude/skills/run-orchestrator/driver.py`):** cobertura dos adaptadores de snapshot/cards PNG, proteção anti-path-traversal e atualização da suíte Playwright E2E + auditoria `axe-core` para o novo layout.
+
+### Removido
+
+- **Elementos visuais legados ("Sala de Instrumentação"):** removido o componente abstrato `Dashboard/src/components/ui/Mimico.tsx` (`Mimico.module.css`), a faixa industrial `.hazard` do topo do `Shell` e rótulos de terminal (`// sala de instrumentação`, `$ logout`).
+
 ## [1.3.126] - 22/11/2026
 
 Limpeza pós-conclusão do ciclo de entregas das consultas promovidas e remoção do roadmap temporário.

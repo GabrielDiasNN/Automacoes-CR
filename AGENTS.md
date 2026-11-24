@@ -1,169 +1,61 @@
 # Unified Agent Contract
 
-Este repositório é compartilhado entre ChatGPT/Codex, Gemini CLI, Antigravity e outros agentes locais.
+Contrato compartilhado entre ChatGPT/Codex, Gemini CLI, Antigravity e Claude Code para manter mesma hierarquia de contexto, regras de edição e governança.
 
-O objetivo deste contrato é fazer com que os agentes trabalhem em equipe, com a mesma hierarquia de contexto, as mesmas regras de edição e a mesma governança de skills.
+## Precedência
 
-## Ordem de Precedência
-
-Quando houver conflito entre instruções, use esta ordem:
-
-1. Instruções explícitas do usuário para a tarefa atual.
-2. Regras nativas do runtime do agente.
-3. Contratos locais e regras do repositório:
-   - `AGENTS.md`
-   - `CLAUDE.md`
-   - `GEMINI.md`
-   - `README.md`
-   - `CONTEXT.md`
-   - `SECURITY.md`
-   - Regras modulares em `.agents/rules/`
+1. Instrução explícita do usuário na tarefa atual.
+2. Regras nativas e de segurança do runtime.
+3. Contratos locais: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `CONTEXT.md`, `SECURITY.md`, `.agents/rules/`.
 4. Skills canônicas do workspace em `.github/skills/`.
-5. Diretrizes globais compartilhadas da máquina:
-   - `%USERPROFILE%\.gemini\GEMINI.md`
-   - `%USERPROFILE%\.gemini\antigravity\skills\`
-   - `%USERPROFILE%\.codex\skills\`
-6. Espelhos de compatibilidade.
+5. Diretrizes globais (`%USERPROFILE%\.gemini\GEMINI.md`, `%USERPROFILE%\.gemini\antigravity\skills\`, `%USERPROFILE%\.codex\skills\`).
+6. Mirrors de compatibilidade.
 
-Regra de resolução:
+Conflito local vs. global → vence a **regra local**. Canônica vs. mirror → vence a **fonte canônica**. Simplicidade de código vs. governança/documentação → governança vence em infraestrutura/config/contratos; simplicidade vence em código de produto.
 
-- Em conflito entre regra local do repositório e regra global da máquina, vence a regra local do repositório.
-- Em conflito entre fonte canônica e mirror, vence sempre a fonte canônica.
-- Em conflito entre simplicidade de código (princípio comportamental) e exigência de governança/documentação: governança prevalece para arquivos de infraestrutura, configuração e contratos; simplicidade prevalece para código de produto e lógica de negócio.
+## Contexto Progressivo (Bootstrap sob Demanda)
 
-## Bootstrap Obrigatório
+Evite carregar toda a documentação do hub em tarefas simples. Leia apenas o que a frente exige:
 
-Antes de análise profunda, refatoração estrutural, mudança de skill ou alteração de governança:
+- **Sempre ativo:** este `AGENTS.md` (e `CLAUDE.md` / `GEMINI.md` conforme o agente).
+- **Sob demanda:** `README.md`, `CONTEXT.md` (baseline v1.0.0; histórico antigo em `docs/historico/CONTEXT-history.md`), `SECURITY.md`, `docs/ai-native-context-monitor.md` (estado e armadilhas recentes) e `.github/skills/README.md` quando tocar arquitetura, governança, segurança ou skills.
+- **Subsistema:** `CLAUDE.md` de subpasta (`Orchestrator/`, `Dashboard/`, `Produção Beneficimento/`, `lib/`) e `.agents/rules/`.
+- **Logs de versão:** nunca leia `CHANGELOG.md` inteiro (~52k tokens); use busca por termo/versão ou trecho final.
 
-1. Ler `AGENTS.md`.
-2. Ler `CLAUDE.md` quando a tarefa tocar qualidade de código, design de solução ou comportamento de agente.
-3. Ler `README.md`, `CONTEXT.md` e `SECURITY.md`.
-4. Ler `GEMINI.md` do repositório quando a tarefa tocar contexto AI-Native, encoding, documentação ou políticas locais.
-5. Ler `.github/skills/README.md` e depois a skill aplicável quando a tarefa tocar governança, runtime, orquestração, UI ou canais.
-6. Se o agente estiver rodando fora do ecossistema Codex, tratar `.gemini/skills/` apenas como alias de `.github/skills/`.
-7. Se a tarefa envolver diretrizes globais compartilhadas entre agentes, ler também `%USERPROFILE%\.gemini\GEMINI.md` e as skills globais aplicáveis.
+## Idioma, Princípios e Encoding
 
-## Idioma e Comunicação
+- **Idioma:** Português do Brasil em toda comunicação, commits, ADRs e documentação operacional; tom técnico e auditável.
+- **Princípios Comportamentais:** fonte única em `karpathy-guidelines` (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution; ver `CLAUDE.md`).
+- **Encoding:** `.ps1`/`.psm1` em `UTF-8 with BOM`; `.md`, `.py`, `.js`, `.json`, `.txt`, `.sql`, `.html`, `.css` em `UTF-8` sem BOM. Markdown em PT-BR deve preservar acentuação sem mojibake.
 
-- Toda comunicação com o usuário deve ser em Português do Brasil.
-- Mensagens de commit, ADRs, changelog técnico e instruções operacionais devem permanecer em Português do Brasil.
-- O tom deve ser técnico, direto e auditável.
+## Skills Canônicas e Descoberta
 
-## Princípios Comportamentais
+| Fonte canônica | Conteúdo | Editável? | Validador |
+| :--- | :--- | :---: | :--- |
+| `.github/skills/` | 9 skills de **padrão** | sim | `Tools/Test-SkillsGovernance.ps1` |
+| `.claude/skills/` | 7 skills **operacionais** (`ci-gates`, `log-triage`, `preflight`, `quality-gate`, `run-tests`, `new-automation`, `run-orchestrator`) | sim | — |
 
-Estes princípios se aplicam a todos os agentes e devem guiar cada decisão de implementação. Fonte única (não duplicar aqui): a skill `karpathy-guidelines` (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution); ver também `CLAUDE.md § Princípios Comportamentais`.
+- **Mirrors (não editáveis):** `.gemini/skills/` → `.github/skills/`; `.agents/skills/` → operacionais de `.claude/skills/`; `.claude/skills/<padrão>` → junctions para `.github/skills/`. Ao criar/renomear skill, rodar `pwsh -File Tools\New-SkillMirrors.ps1`.
+- **Skills globais obrigatórias:** fonte única em `%USERPROFILE%\.gemini\antigravity\skills\` (`ai-engineering-discipline`, `protocolo-valeg`, `git-ide-governance-skill`).
+- **App real:** para subir, autenticar no dashboard, capturar tela ou chamar `/api/*`, use `.claude/skills/run-orchestrator/` (checar `health` antes de reiniciar).
 
-## Regras de Encoding
+## Modo de Trabalho e Contrato Compartilhado
 
-- Arquivos PowerShell (`.ps1`, `.psm1`) devem usar `UTF-8 with BOM`.
-- Arquivos Markdown (`.md`) devem usar `UTF-8` sem BOM, com acentuação normal em PT-BR quando o texto estiver em português.
-- Arquivos `.py`, `.js`, `.json`, `.txt`, `.sql`, `.html` e `.css` devem usar `UTF-8` sem BOM, salvo exceção explícita do repositório.
-- Antes de salvar, o agente deve verificar se a mudança preserva o encoding esperado e não introduz mojibake ou perda de acentuação em documentação Markdown.
+- **Autonomia e paradas:** prossiga sem perguntar quando não houver decisão; pare antes de apagar dados/arquivos, force-push, reset destrutivo, ações externas (push, PR, comentários) ou alterações fora do repo. Em tarefas longas use `TASKS.md` (ignorado no Git) e encerre com **Bloqueado em mim**, **Alterado**, **Encontrado**; marque o que não foi confirmado e onde procurou.
+- **Dependências:** autorização permanente do dono para instalar pacotes dos locks/CI e módulos PS dos gates (fonte oficial, escopo de venv/usuário/contêiner — nunca fora do `.venv` na máquina de produção nem com credencial no comando; barreira de rede/classificador é parada, não contornar).
+- **Subagentes e revisores:** edição paralela só em `worktree` com escopos disjuntos e revisão de diff/hash pelo principal. Diretrizes: usar `diretrizes-verifier` + `Tools/Test-AgentGuidelines.ps1`. Revisores em `.claude/agents/` são restritos a leitura (`changelog-reviewer` tem `Bash` só para `git diff` por instrução).
+- **Engenharia:** manter idempotência, cleanup, tratamento de erro, observabilidade, Zero Trust, diffs pequenos e documentação viva atualizada (`README.md`, `CONTEXT.md`, `SECURITY.md`, `CHANGELOG.md`, `docs/ai-native-context-monitor.md`). Nunca expor segredos nem reverter trabalho alheio sem pedido explícito.
 
-## Fonte Canônica de Skills do Repositório
+## Governança de Git e PR
 
-O repositório tem **duas árvores de skills versionadas**, com responsabilidades distintas:
+- Inspecionar estado (`git status`, `git log`) antes de mutação; nunca executar `git reset --hard`, `git checkout --`, `git clean -fd` ou `git push --force` sem pedido explícito e aviso.
+- **Fluxo autorizado (quando entrega por PR for solicitada — detalhe em `.agents/workflows/fluxo-pr-completo.md`):**
+  1. **Commit:** stage seletivo, mensagem atômica em PT-BR (`[1.3.xxx]` se alterar `CHANGELOG.md`), respeitando `pre-commit` (nunca `--no-verify`). Se pedido só commit, parar aqui.
+  2. **PR:** checar `gh auth status`, `git push -u origin <branch>` (nunca direto em `main`) e `gh pr create` com `.github/pull_request_template.md` e evidências reais.
+  3. **CI:** monitorar checks (`gh pr checks <n>`, timers com `schedule` em vez de `sleep`); em falha, corrigir na branch, validar localmente e reenviar até 0 falhas.
+  4. **Merge:** com checks 100% verdes e `MERGEABLE`/`CLEAN`, rodar `gh pr merge <n> --squash --delete-branch`, atualizar `main` (`git pull --ff-only`) e `git fetch --prune`. Parar se houver conflito ou falha persistente.
 
-| Árvore            | Conteúdo                                                                                                                                                            | Editável?               | Validador                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------- |
-| `.github/skills/` | 9 skills de **padrão** (norma escrita, taxonomia ativa)                                                                                                             | sim — fonte canônica    | `Tools/Test-SkillsGovernance.ps1` (9 seções, frontmatter, discovery) |
-| `.claude/skills/` | skills **operacionais** do projeto (comandos executáveis: `ci-gates`, `log-triage`, `preflight`, `quality-gate`, `run-tests`, `new-automation`, `run-orchestrator`) | sim — fonte única delas | —                                                                    |
+## Validação Obrigatória
 
-Cada agente lê de um caminho fixo próprio, então as fontes são expostas por **mirrors não versionados** (ver `.gitignore`), recriados por `pwsh -File Tools\New-SkillMirrors.ps1`:
-
-- `.gemini/skills/` → junctions para `.github/skills/` (Gemini CLI).
-- `.agents/skills/` → junctions para as skills operacionais de `.claude/skills/` (Codex / Antigravity).
-- `.claude/skills/<nome>` (as 9 de padrão) → junctions para `.github/skills/`, porque **o Claude Code só descobre skill em `.claude/skills/`**. As 7 skills operacionais reais convivem no mesmo diretório; o script nunca as toca.
-
-- Cada item de mirror deve apontar para a skill correspondente na fonte canônica; nunca cópia real (a governança reprova).
-- Não manter duas cópias editáveis da mesma skill.
-
-## Fonte Canônica de Skills Globais Compartilhadas
-
-- As skills globais compartilhadas entre Gemini CLI, Antigravity e Codex devem ter fonte única na máquina.
-- A fonte canônica atual das skills globais compartilhadas é `%USERPROFILE%\.gemini\antigravity\skills\`.
-- As exposições em outros agentes, incluindo `%USERPROFILE%\.codex\skills\`, devem ser mirrors por junction/symlink sempre que possível.
-- Não manter cópias editáveis divergentes da mesma skill global em múltiplos diretórios.
-
-Skills globais compartilhadas obrigatórias:
-
-- `ai-engineering-discipline`
-- `protocolo-valeg`
-- `git-ide-governance-skill`
-
-`ai-engineering-discipline` define a disciplina global de engenharia com IA: contexto correto, menor mudança suficiente, simplicidade, depuração verificável e separação entre protótipo e produção. Ela não substitui `protocolo-valeg` nem `git-ide-governance-skill`; mudanças envolvendo Git devem continuar usando a skill de Git.
-
-## Regra Operacional para Skills
-
-- Ao alterar skill de **padrão**, editar somente `.github/skills/` (nunca o junction em `.claude/skills/` nem o mirror `.gemini/skills/`).
-- Ao alterar skill **operacional**, editar somente `.claude/skills/`.
-- Ao criar ou renomear qualquer skill, rodar `pwsh -File Tools\New-SkillMirrors.ps1` para recriar os mirrors — skill nova sem espelho reprova a governança.
-- Ao alterar skill global compartilhada, editar somente a fonte canônica em `%USERPROFILE%\.gemini\antigravity\skills\`.
-- Preservar mirrors como link simbólico ou junction para evitar drift.
-- Se um agente descobrir a skill via mirror ou junction, deve tratar o conteúdo como alias da fonte canônica.
-- Melhorar skill existente antes de propor skill nova.
-
-## Modo de Trabalho
-
-- Quando um passo não precisar de decisão do usuário, continue; coloque notas de status na mesma mensagem da próxima ação.
-- Pare e pergunte só quando não puder continuar sem o usuário, ou antes de ações destrutivas ou difíceis de reverter: apagar dados ou arquivos, force-push, reset destrutivo, ações visíveis a terceiros (push, comentários, mensagens) ou alterar algo fora do repositório da tarefa.
-- Em tarefas longas (muitas etapas, muitos arquivos ou que possam passar de uma sessão), mantenha a checklist em `TASKS.md` na raiz do repositório (ignorado pelo Git; não commitar salvo pedido), marcando cada item ao concluí-lo e registrando o que descobrir de novo.
-- Em auditorias ou migrações amplas, divida entre subagentes apenas trabalhos independentes e confira a evidência de cada um antes de aceitar.
-- Ao fechar tarefas longas, termine com três títulos: **Bloqueado em mim**, **Alterado**, **Encontrado**.
-- Marque o que não conseguiu confirmar e diga onde procurou.
-- Autorização permanente do dono: instale sem perguntar as dependências necessárias para analisar ou validar (pacotes dos locks do repositório, módulos PowerShell dos gates, ferramentas de lint e teste). Limites: fonte oficial (PyPI, npm, NuGet, repositório da Microsoft), versão do lock ou do CI quando existir, escopo de venv, de usuário ou do contêiner em nuvem; nunca instalar fora do venv do projeto na máquina que roda o Orchestrator em produção, nem com credencial no comando. Barreira de rede ou do classificador continua valendo: peça a liberação do host em vez de contornar.
-- Permissão ou ação negada pelo harness, pelo classificador ou pelo usuário é parada, não obstáculo: não refaça o mesmo resultado por outra ferramenta, em partes menores ou com outra sintaxe. Conclua o que não depende dela, registre o bloqueio e peça a decisão.
-- Edição paralela por subagentes só com `isolation: worktree` e escopos de arquivo disjuntos; o agente principal refaz o diff e confere o hash de cada entrega.
-- Para conferir mudança em arquivo de diretriz, use o subagente somente leitura `diretrizes-verifier`; `Tools/Test-AgentGuidelines.ps1` cobre o que é mecânico (etapa do `/preflight` e gate do CI, job `markdown`).
-- Os subagentes revisores de `.claude/agents/` declaram `tools:` restrito (`Read, Grep, Glob`), sem `Edit` nem `Write`; correção de achado é feita pelo agente principal. Exceção: o `changelog-reviewer` também tem `Bash` para rodar `git diff`, e `Bash` não é restrito por mecanismo a esse comando, então esse agente não é somente leitura por garantia, só por instrução.
-
-## Contrato Compartilhado Entre Agentes
-
-Todos os agentes devem operar com estas regras não negociáveis:
-
-- Ler o contexto central antes de propor mudança estrutural.
-- Atualizar documentação viva quando a implementação mudar de forma relevante.
-- Manter idempotência, cleanup, tratamento de erro, observabilidade e Zero Trust.
-- Não expor segredos em logs, comandos, mensagens ou exemplos.
-- Não sobrescrever nem reverter mudanças de outro agente sem instrução explícita.
-- Se encontrar worktree sujo ou conflito real de ownership, trabalhar em volta do conflito ou pedir orientação.
-- Preferir diffs pequenos, reversíveis e auditáveis.
-
-## Governança de Git e IDE
-
-- Operações Git devem ser seguras por padrão.
-- Antes de comando mutável relevante, inspecionar estado com comandos como `git status`, `git log` ou `git reflog`, conforme o caso.
-- Não recomendar nem executar `git reset --hard`, `git checkout --`, `git push --force` ou equivalente destrutivo sem pedido explícito do usuário e aviso claro de impacto.
-- Commits devem ser atômicos, com mensagem clara e contexto suficiente para auditoria.
-- **Padrão de Commit, PR, CI e Limpeza de Branch** (autorização permanente do dono quando a entrega por PR for solicitada, sem precisar reconfirmar cada etapa):
-  1. **Commit local:** validar escopo via `git status`/`git diff`, fazer stage seletivo apenas dos arquivos da tarefa e criar commit atômico em PT-BR (título descritivo + bullets de auditoria; incluir `[1.3.xxx]` quando alterar `CHANGELOG.md`), respeitando integralmente o hook `pre-commit` (nunca usar `--no-verify`). Se o usuário pedir apenas commit, encerrar aqui sem `push`.
-  2. **Abertura de PR:** quando o usuário solicitar abrir/subir PR ou concluir entrega no GitHub em branch de trabalho (nunca direto em `main`), checar `gh auth status` com saída descartada, executar `git push -u origin <branch>` e abrir o PR contra `main` via `gh pr create` preenchendo `.github/pull_request_template.md` com as evidências locais reais executadas na sessão.
-  3. **Acompanhamento e correção de CI:** monitorar todos os checks via `gh pr checks <n> --json name,state,bucket,link` (resumindo com `resumir_checks.py` quando disponível) usando timers (`schedule`) em vez de `sleep` em shell. Em caso de falha, inspecionar `gh run view <id> --log-failed`, corrigir na mesma branch, validar localmente o escopo equivalente, commitar, dar `push` e acompanhar o novo run até `0` falhas e `0` pendentes.
-  4. **Merge e limpeza pós-CI verde:** com `100%` dos checks verdes e PR `MERGEABLE`/`CLEAN` (sem conflito ou bloqueio), finalizar automaticamente com `gh pr merge <n> --squash --delete-branch`, voltar para `main` atualizada (`git pull --ff-only` se necessário), executar `git fetch --prune` e confirmar branch local/remota removida e worktree limpo. Se surgir conflito, falha persistente no CI ou diff fora do escopo, parar e reportar antes de mergear.
-
-## Colaboração com Documentação AI-Native
-
-- `README.md` deve refletir objetivo, setup e estado geral.
-- `CONTEXT.md` deve refletir regras de negócio, fluxos, contratos e integrações.
-- `SECURITY.md` deve refletir guardrails e tratamento de dados sensíveis.
-- `CHANGELOG.md` deve ser atualizado quando a mudança alterar comportamento, governança, arquitetura ou contrato operacional.
-
-## Descoberta Recomendada
-
-- ChatGPT/Codex: ler primeiro `.github/skills/README.md` e depois a skill aplicável.
-- Gemini CLI e Antigravity: descobrem regras locais em `.agents/rules/`, contratos de raiz `AGENTS.md`/`GEMINI.md` e skills em `.gemini/skills/` (conteúdo espelhado de `.github/skills/`).
-- Claude Code: além de `CLAUDE.md`, usa `.claude/agents/` (subagentes especializados), `.claude/skills/` (skills locais) e `.claude/settings.json` (hooks/config); GitHub Copilot usa `.github/copilot-instructions.md` como fonte de instruções.
-- Para **rodar e dirigir o app real** (subir, autenticar no dashboard, capturar tela, chamar rotas `/api/*`), a fonte é `.claude/skills/run-orchestrator/` — driver executável, não descrição. Não reimplementar o caminho de login nem reiniciar o Orchestrator sem antes checar se já há instância viva.
-- Para regras globais compartilhadas entre agentes, carregar `%USERPROFILE%\.gemini\GEMINI.md` e as skills globais canônicas.
-- Quando houver divergência entre `.github/skills/` e `.gemini/skills/`, considerar `.github/skills/` a fonte de verdade do workspace.
-
-## Validação
-
-- Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SkillsGovernance.ps1 -BasePath .`.
-- Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SourceEncoding.ps1 -RootPath .`.
-- Rode `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` quando a mudança tocar governança mais ampla.
-- Para mudanças de Dashboard/UI, rotas FastAPI consumidas pela UI, fluxos operacionais E2E ou contrato de interação front-back:
-  - A validação final obrigatória deve ser E2E com Playwright.
-  - O método padrão é validar a tela real servida em `http://127.0.0.1:8000/dashboard/`, incluindo navegação, ações críticas e ausência de erros de console.
-  - Essa validação deve acontecer por último, após testes de governança, e deve ser registrada na entrega técnica.
-- O validador deve manter a taxonomia em `.github/skills/`, o espelho em `.gemini/skills/`, os mirrors globais obrigatórios do Codex e a política de encoding de `.md`, `.py`, `.js`, `.json`, `.txt`, `.sql`, `.html`, `.css`, `.ps1` e `.psm1` consistentes.
+- Governança e encoding: `pwsh -NoProfile -ExecutionPolicy Bypass -File Tools/Test-SkillsGovernance.ps1 -BasePath .`, `Tools/Test-SourceEncoding.ps1 -RootPath .` e `Tools/ValidarAutomacoes.ps1 -BasePath . -OnlyGovernance` (quando tocar governança ampla).
+- **Dashboard/UI, rotas FastAPI da UI ou fluxos E2E:** validação final obrigatória em Playwright na URL real `http://127.0.0.1:8000/dashboard/` (navegação, ações críticas e console limpo), executada por último e registrada na entrega.

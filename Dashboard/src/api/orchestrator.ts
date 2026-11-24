@@ -779,11 +779,19 @@ export const orchestratorApi = {
     signal?: AbortSignal,
   ) => api.get<Paginated<Automation>>(`/api/automations${qs({ ...params })}`, signal).then((r) => r.items),
   listAllAutomations: (signal?: AbortSignal) => api.get<Automation[]>("/api/automations/all", signal),
+  updateAutomation: (id: number, payload: AutomationUpdatePayload) =>
+    api.patch<Automation>(`/api/automations/${id}`, payload),
   startAutomation: (id: number) => api.post<{ message: string; exec_id: string }>(`/api/automations/${id}/start`),
   pauseAutomation: (id: number) => api.post<{ message: string }>(`/api/automations/${id}/pause`),
   resumeAutomation: (id: number) => api.post<{ message: string }>(`/api/automations/${id}/resume`),
+  setAutomationTestMode: (id: number, enabled: boolean) =>
+    api.post<{ message: string }>(`/api/automations/${id}/test-mode`, { enabled }),
+  setGlobalTestMode: (enabled: boolean) =>
+    api.post<{ message: string }>("/api/automations/test-mode/global", { enabled }),
   pauseAll: () => api.post<{ message: string }>("/api/automations/control/pause-all"),
   resumeAll: () => api.post<{ message: string }>("/api/automations/control/resume-all"),
+  previewSchedule: (schedule: string | null, limit = 5) =>
+    api.post<SchedulePreviewResponse>("/api/system/schedule/preview", { schedule, limit }),
 
   // ── Execuções ──
   listExecutions: (
@@ -848,11 +856,13 @@ export const orchestratorApi = {
   refreshBeneficiamento: (period: string) =>
     api.post<Record<string, unknown>>(`/api/beneficiamento/refresh${qs({ period })}`),
 
-  // ── Consultas Promovidas (PCP / Modelo 2) ──
+  // ── Consultas Promovidas & Resultados das Automações (Snapshot-First) ──
   getPromovidas: (signal?: AbortSignal) =>
     api.get<{ items: PromovidaResumo[] }>("/api/promovidas/", signal),
   getPromovidaLatest: (slug: string, signal?: AbortSignal) =>
     api.get<PromovidaSnapshot>(`/api/promovidas/${encodeURIComponent(slug)}/latest`, signal),
+  getPromovidaCardBlob: (slug: string, filename: string, signal?: AbortSignal) =>
+    api.getBlob(`/api/promovidas/${encodeURIComponent(slug)}/cards/${encodeURIComponent(filename)}`, signal),
   getPromovidaHistory: (slug: string, limit = 20, signal?: AbortSignal) =>
     api.get<{ slug: string; items: PromovidaHistoricoItem[] }>(
       `/api/promovidas/${encodeURIComponent(slug)}/history${qs({ limit })}`,
@@ -860,10 +870,41 @@ export const orchestratorApi = {
     ),
 };
 
+export interface AutomationUpdatePayload {
+  description?: string | null | undefined;
+  schedule?: string | null | undefined;
+  max_runtime_minutes?: number | undefined;
+  max_retries?: number | undefined;
+  cooldown_minutes?: number | undefined;
+  sla_minutes?: number | null | undefined;
+  enabled?: boolean | undefined;
+  test_mode?: boolean | undefined;
+}
+
+export interface SchedulePreviewResponse {
+  valid: boolean;
+  normalized_schedule: string | null;
+  schedule_type: string | null;
+  schedule_summary: string | null;
+  next_runs_preview: string[];
+  errors: string[];
+}
+
+export interface PromovidaCard {
+  key: string;
+  title: string;
+  filename: string;
+  caption: string;
+}
+
 export interface PromovidaResumo {
   slug: string;
+  codigo?: string | undefined;
   nome: string;
   titulo: string;
+  origem?: "automacao" | "promovida" | string | undefined;
+  setor?: string | undefined;
+  automation_name?: string | undefined;
   modo: "sombra" | "producao" | string;
   destinos: string[];
   has_snapshot: boolean;
@@ -871,13 +912,18 @@ export interface PromovidaResumo {
   age_minutes: number | null;
   total_rows: number;
   excecoes_count: number;
+  cards_count?: number | undefined;
   kpis: Record<string, number | string | null>;
 }
 
 export interface PromovidaSnapshot {
   slug: string;
+  codigo?: string | undefined;
   nome: string;
   titulo: string;
+  origem?: "automacao" | "promovida" | string | undefined;
+  setor?: string | undefined;
+  automation_name?: string | undefined;
   modo: "sombra" | "producao" | string;
   generated_at: string;
   age_minutes: number | null;
@@ -886,6 +932,7 @@ export interface PromovidaSnapshot {
   kpis: Record<string, number | string | null>;
   columns: string[];
   rows: Record<string, unknown>[];
+  cards?: PromovidaCard[] | undefined;
 }
 
 export interface PromovidaHistoricoItem {
