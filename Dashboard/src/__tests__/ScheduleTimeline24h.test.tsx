@@ -110,11 +110,31 @@ describe("ScheduleTimeline24h", () => {
 
     const { container } = render(<ScheduleTimeline24h automations={autos} onSelectAutomation={vi.fn()} />);
 
-    expect(screen.getByText("1 hora congestionada (≥ 2 disparos)")).toBeInTheDocument();
+    expect(screen.getByText("1 hora congestionada (≥ 2 automações)")).toBeInTheDocument();
     const hour7 = container.querySelector('[data-hour="7"]');
     const hour10 = container.querySelector('[data-hour="10"]');
     expect(hour7).toHaveAttribute("data-congested", "true");
     expect(hour10).toHaveAttribute("data-congested", "false");
+  });
+
+  it("não marca hora como congestionada para uma única automação de intervalo 30 min", () => {
+    const autos: Automation[] = [
+      makeAutomation({
+        id: 30,
+        name: "Auto 30m",
+        schedule_type: "interval",
+        schedule: JSON.stringify({
+          schedule_type: "interval",
+          interval_minutes: 30,
+          start_time: "08:00",
+          end_time: "09:30",
+        }),
+      }),
+    ];
+
+    const { container } = render(<ScheduleTimeline24h automations={autos} onSelectAutomation={vi.fn()} />);
+    expect(screen.queryByText(/congestionada/)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-hour="8"]')).toHaveAttribute("data-congested", "false");
   });
 
   it("dispara onSelectAutomation ao clicar em um item da timeline", () => {

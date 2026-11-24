@@ -15,22 +15,29 @@ describe("ErrorBoundary e NotFoundPage", () => {
 
   it("ErrorBoundary captura exceção de render e exibe botão Recarregar", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
+    const originalLocation = Object.getOwnPropertyDescriptor(window, "location");
     const reloadSpy = vi.fn();
     Object.defineProperty(window, "location", {
       value: { ...window.location, reload: reloadSpy },
       configurable: true,
     });
 
-    render(
-      <ErrorBoundary>
-        <BrokenChild />
-      </ErrorBoundary>,
-    );
+    try {
+      render(
+        <ErrorBoundary>
+          <BrokenChild />
+        </ErrorBoundary>,
+      );
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Algo quebrou nesta tela");
-    expect(screen.getByText("Falha simulada de renderização")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
-    expect(reloadSpy).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("alert")).toHaveTextContent("Algo quebrou nesta tela");
+      expect(screen.getByText("Falha simulada de renderização")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+      expect(reloadSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalLocation) {
+        Object.defineProperty(window, "location", originalLocation);
+      }
+    }
   });
 
   it("NotFoundPage exibe o caminho inexistente e navega para /painel", () => {

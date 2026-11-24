@@ -674,7 +674,9 @@ def test_e2e_dashboard_beneficiamento_loads(uvicorn_server: str, page: Any) -> N
     _inject_api_key(page)
 
     page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
-    page.get_by_role("heading", name="Produção & Beneficiamento").wait_for(timeout=30_000)
+    page.get_by_role("heading", name="Produção & Beneficiamento").wait_for(
+        timeout=30_000
+    )
     page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
 
     assert not console_errors, f"Erros de console em Beneficiamento: {console_errors}"
@@ -785,7 +787,9 @@ def test_screenshot_beneficiamento_kpi_carregado(
     _inject_api_key(page)
     _inject_theme(page, "dark")
     page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
-    page.get_by_role("heading", name="Produção & Beneficiamento").wait_for(timeout=30_000)
+    page.get_by_role("heading", name="Produção & Beneficiamento").wait_for(
+        timeout=30_000
+    )
     page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
     _assert_matches_baseline(page, "dashboard_beneficiamento_kpi")
 
@@ -838,7 +842,9 @@ def test_screenshot_beneficiamento_kpi_carregado_light(
     _inject_api_key(page)
     _inject_theme(page, "light")
     page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
-    page.get_by_role("heading", name="Produção & Beneficiamento").wait_for(timeout=30_000)
+    page.get_by_role("heading", name="Produção & Beneficiamento").wait_for(
+        timeout=30_000
+    )
     page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
     _assert_matches_baseline(page, "dashboard_beneficiamento_kpi_light")
 
@@ -1015,7 +1021,9 @@ def test_a11y_beneficiamento_sem_violacoes_serias(
     """
     _inject_api_key(page)
     page.goto(f"{uvicorn_server}/dashboard/beneficiamento")
-    page.get_by_role("heading", name="Produção & Beneficiamento").wait_for(timeout=30_000)
+    page.get_by_role("heading", name="Produção & Beneficiamento").wait_for(
+        timeout=30_000
+    )
     page.wait_for_selector("text=saúde do snapshot", timeout=15_000)
     page.get_by_role("tab", name=re.compile("Rankings & Gargalos")).click()
 
@@ -1125,7 +1133,9 @@ def test_e2e_pcp_consultas_promovidas_sem_violacoes_serias(
 
     _inject_api_key(page)
     page.goto(f"{uvicorn_server}/dashboard/pcp")
-    page.get_by_role("heading", name="Central de Consultas & PCP").wait_for(timeout=30_000)
+    page.get_by_role("heading", name="Central de Consultas & PCP").wait_for(
+        timeout=30_000
+    )
     page.wait_for_selector("text=Catálogo ativo", timeout=15_000)
     page.get_by_text("Risco Atraso Ramas").first.wait_for(timeout=15_000)
 
@@ -1208,7 +1218,9 @@ def test_e2e_pcp_cards_png_sem_bloqueio_csp(uvicorn_server: str, page: Any) -> N
         timeout=15_000,
     )
 
-    assert not console_errors, f"Erros de console ao carregar cards PNG: {console_errors}"
+    assert (
+        not console_errors
+    ), f"Erros de console ao carregar cards PNG: {console_errors}"
 
 
 @pytest.mark.e2e
@@ -1251,11 +1263,9 @@ def test_e2e_execucoes_drawer_aba_resultado_negocio(
     dialog = page.get_by_role("dialog")
     dialog.wait_for(timeout=10_000)
     dialog.get_by_role("tab", name=re.compile("Resultado de Negócio")).click()
-    dialog.wait_for(timeout=10_000)
-    assert (
-        dialog.get_by_text("Registros").count() > 0
-        or dialog.get_by_text("Sem snapshot tabular vinculado").count() > 0
-    )
+    dialog.get_by_text(
+        re.compile(r"Registros|Sem snapshot tabular vinculado")
+    ).first.wait_for(timeout=15_000)
 
 
 @pytest.mark.e2e
@@ -1275,7 +1285,9 @@ def test_e2e_beneficiamento_troca_abas(uvicorn_server: str, page: Any) -> None:
     page.wait_for_selector("text=por setor industrial", timeout=15_000)
     page.get_by_role("tab", name=re.compile("Painel de Tingimento")).click()
     page.wait_for_selector("text=Tingimento", timeout=15_000)
-    assert not console_errors, f"Erros de console ao trocar abas em Beneficiamento: {console_errors}"
+    assert (
+        not console_errors
+    ), f"Erros de console ao trocar abas em Beneficiamento: {console_errors}"
 
 
 @pytest.mark.e2e
@@ -1292,7 +1304,9 @@ def test_e2e_visao_geral_radar_pcp_navega_para_consulta(
             for item in items:
                 if isinstance(item, dict) and item.get("slug") == "rama-risco-atraso":
                     item["has_snapshot"] = True
-                    item["excecoes_count"] = max(int(item.get("excecoes_count") or 0), 5)
+                    item["excecoes_count"] = max(
+                        int(item.get("excecoes_count") or 0), 5
+                    )
                     item["total_rows"] = max(int(item.get("total_rows") or 0), 5)
             route.fulfill(
                 status=200,
@@ -1303,19 +1317,24 @@ def test_e2e_visao_geral_radar_pcp_navega_para_consulta(
         route.fulfill(response=response)
 
     page.route("**/api/promovidas**", _interceptar_radar)
-    _inject_api_key(page)
-    page.goto(f"{uvicorn_server}/dashboard/painel")
-    page.get_by_role("heading", name="Visão Geral").wait_for(timeout=30_000)
-    page.wait_for_selector("text=Radar de PCP, Consultas & Alertas Ativos", timeout=15_000)
+    try:
+        _inject_api_key(page)
+        page.goto(f"{uvicorn_server}/dashboard/painel")
+        page.get_by_role("heading", name="Visão Geral").wait_for(timeout=30_000)
+        page.wait_for_selector(
+            "text=Radar de PCP, Consultas & Alertas Ativos", timeout=15_000
+        )
 
-    radar_btn = page.locator("button", has_text="Risco Atraso Ramas").first
-    radar_btn.wait_for(timeout=15_000)
-    radar_btn.click()
+        radar_btn = page.locator("button", has_text="Risco Atraso Ramas").first
+        radar_btn.wait_for(timeout=15_000)
+        radar_btn.click()
 
-    page.wait_for_url(re.compile(r".*/pcp\?slug=rama-risco-atraso"), timeout=15_000)
-    page.get_by_role("heading", name="Central de Consultas & PCP").wait_for(
-        timeout=15_000
-    )
+        page.wait_for_url(re.compile(r".*/pcp\?slug=rama-risco-atraso"), timeout=15_000)
+        page.get_by_role("heading", name="Central de Consultas & PCP").wait_for(
+            timeout=15_000
+        )
+    finally:
+        page.unroute_all(behavior="ignoreErrors")
 
 
 @pytest.mark.e2e
@@ -1347,9 +1366,7 @@ def test_e2e_topbar_tema_densidade_e_command_palette(
 
 
 @pytest.mark.e2e
-def test_e2e_not_found_page_e_retorno_ao_painel(
-    uvicorn_server: str, page: Any
-) -> None:
+def test_e2e_not_found_page_e_retorno_ao_painel(uvicorn_server: str, page: Any) -> None:
     """Rota desconhecida renderiza NotFoundPage e botao retorna ao Painel."""
     _inject_api_key(page)
     page.goto(f"{uvicorn_server}/dashboard/rota-inexistente-e2e")
@@ -1363,9 +1380,7 @@ def test_e2e_not_found_page_e_retorno_ao_painel(
 
 
 @pytest.mark.e2e
-def test_e2e_apikey_gate_validacao_e_login_ui(
-    uvicorn_server: str, page: Any
-) -> None:
+def test_e2e_apikey_gate_validacao_e_login_ui(uvicorn_server: str, page: Any) -> None:
     """Valida tela de login ApiKeyGate: erro vazio, chave invalida e login valido."""
     page.goto(f"{uvicorn_server}/dashboard/painel")
     page.get_by_label("API Key").wait_for(timeout=15_000)
@@ -1376,7 +1391,10 @@ def test_e2e_apikey_gate_validacao_e_login_ui(
 
     # Chave invalida provoca 401/403 e retorna ao gate
     page.get_by_label("API Key").fill("chave-invalida-e2e")
-    page.get_by_role("button", name=re.compile("Entrar")).click()
+    with page.expect_response(
+        lambda r: "/api/" in r.url and r.status in (401, 403), timeout=15_000
+    ):
+        page.get_by_role("button", name=re.compile("Entrar")).click()
     page.get_by_label("API Key").wait_for(timeout=15_000)
 
     # Chave valida autentica e abre o Painel

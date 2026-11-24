@@ -5,6 +5,7 @@ export type WsStatus = "connecting" | "open" | "closed" | "unauthorized";
 
 interface UseWebSocketOptions {
   onMessage?: (event: MessageEvent) => void;
+  onOpen?: () => void;
   enabled?: boolean;
 }
 
@@ -28,7 +29,7 @@ export function useWebSocket(
   apiKey: string,
   options: UseWebSocketOptions = {},
 ) {
-  const { onMessage, enabled = true } = options;
+  const { onMessage, onOpen, enabled = true } = options;
   const [status, setStatus] = useState<WsStatus>("closed");
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectDelay = useRef(1000);
@@ -41,6 +42,8 @@ export function useWebSocket(
   const generationRef = useRef(0);
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
 
   const connect = useCallback(() => {
     if (!enabled || !path || !apiKey) return;
@@ -77,6 +80,7 @@ export function useWebSocket(
             ws.close();
             return;
           }
+          onOpenRef.current?.();
           setStatus("open");
           reconnectDelay.current = 1000; // reset backoff em sucesso (3.2)
         };

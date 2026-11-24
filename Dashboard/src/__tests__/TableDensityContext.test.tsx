@@ -38,13 +38,14 @@ describe("TableDensityContext", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe("comfortable");
   });
 
-  it("recupera para 'comfortable' ao alternar a partir de valor inválido no localStorage", () => {
+  it("recupera para 'comfortable' na montagem quando há valor inválido no localStorage", () => {
     localStorage.setItem(STORAGE_KEY, "desconhecido");
     const { result } = renderTableDensity();
+    expect(result.current.density).toBe("comfortable");
 
     act(() => result.current.toggleDensity());
-    expect(result.current.density).toBe("comfortable");
-    expect(localStorage.getItem(STORAGE_KEY)).toBe("comfortable");
+    expect(result.current.density).toBe("compact");
+    expect(localStorage.getItem(STORAGE_KEY)).toBe("compact");
   });
 
   it("lança erro quando useTableDensity é chamado fora de TableDensityProvider", () => {

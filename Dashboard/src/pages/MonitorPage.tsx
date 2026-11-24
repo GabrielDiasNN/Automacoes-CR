@@ -299,7 +299,10 @@ export function MonitorPage() {
   const cutoff7d = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    return d.toISOString().slice(0, 10);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
   }, []);
   const { errorsTrendHint, errorsTrendTone, currentWeekErrors } = useMemo(() => {
     const currentWeekErrors = dailyItems.filter((d) => d.date >= cutoff7d).reduce((sum, d) => sum + d.errors, 0);

@@ -38,7 +38,15 @@ from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 ROOT = Path(__file__).resolve().parents[3]
 SHOT_DIR = ROOT / "Logs" / "driver"
 
-ROTAS = ["painel", "beneficiamento", "pcp", "automacoes", "execucoes", "monitor", "sistema"]
+ROTAS = [
+    "painel",
+    "beneficiamento",
+    "pcp",
+    "automacoes",
+    "execucoes",
+    "monitor",
+    "sistema",
+]
 
 # Ruido conhecido do console que nao caracteriza falha do app.
 IGNORAR_CONSOLE = (
@@ -224,9 +232,9 @@ def cmd_login() -> int:
             gate.fill(API_KEY)
             pagina.get_by_role("button", name=re.compile("Entrar")).click()
             # O shell so aparece depois que o gate cede; ancoramos na navegacao real.
-            pagina.get_by_role("link", name=re.compile("Visão Geral|Painel", re.I)).wait_for(
-                timeout=15000
-            )
+            pagina.get_by_role(
+                "link", name=re.compile("Visão Geral|Painel", re.I)
+            ).wait_for(timeout=15000)
             pagina.wait_for_timeout(2500)
             _capturar(pagina, "login-painel")
             print(f"[OK] login concluido — titulo: {pagina.title()!r}")
@@ -244,6 +252,7 @@ def cmd_shot(rotas: list[str]) -> int:
         try:
             for rota in rotas:
                 nome = rota.strip("/") or "raiz"
+                nome_arquivo = re.sub(r"[^A-Za-z0-9._-]", "-", nome)
                 coletor.rota = nome
                 alvo = f"{BASE}/dashboard/{rota.strip('/')}"
                 pagina.goto(alvo, wait_until="networkidle", timeout=30000)
@@ -253,7 +262,7 @@ def cmd_shot(rotas: list[str]) -> int:
                         f"{nome}: gate de API Key apareceu (chave nao aceita)"
                     )
                 print(f"[OK] {alvo}")
-                _capturar(pagina, f"rota-{nome}")
+                _capturar(pagina, f"rota-{nome_arquivo}")
         finally:
             navegador.close()
     coletor.relatar()

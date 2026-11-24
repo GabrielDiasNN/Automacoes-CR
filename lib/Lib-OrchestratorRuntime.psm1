@@ -122,7 +122,8 @@ function Stop-OrchestratorProcesses {
     )
     $rootPattern = [regex]::Escape($ProjectRoot)
     $currentPid = $PID
-    $processes = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $allProcs = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $processes = @($allProcs | Where-Object {
         if ($_.ProcessId -eq $currentPid -or $null -eq $_.CommandLine) { return $false }
 
         # ESCOPO OBRIGATÓRIO — o processo precisa pertencer a ESTE projeto.
@@ -149,8 +150,14 @@ function Stop-OrchestratorProcesses {
                    ($IncludeStarter -and $_.CommandLine -match "Start-Orchestrator\.ps1")
         }
         return $false
-    }
-    foreach ($proc in $processes) {
+    })
+    $targetIds = @($processes | ForEach-Object { $_.ProcessId })
+    $children = @($allProcs | Where-Object {
+        $null -ne $_.ParentProcessId -and
+        ($targetIds -contains $_.ParentProcessId) -and
+        ($targetIds -notcontains $_.ProcessId)
+    })
+    foreach ($proc in @($children + $processes)) {
         try {
             Write-Verbose ("Encerrando PID {0} ({1})" -f $proc.ProcessId, $proc.Name)
             Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop

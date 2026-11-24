@@ -138,9 +138,14 @@ try {
         }
     }
     if (-not $apiReady) {
+        $pidFile = Join-Path $OrchestratorDir "orchestrator.pid"
         if ($null -ne $apiProcess -and -not $apiProcess.HasExited) {
+            # .venv\Scripts\python.exe (venvlauncher) gera python.exe real como filho:
+            # matar a arvore evita deixar uvicorn orfao segurando a porta.
+            & taskkill.exe /F /T /PID $apiProcess.Id 2>$null | Out-Null
             Stop-Process -Id $apiProcess.Id -Force -ErrorAction SilentlyContinue
         }
+        Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
         $errTail = ""
         if (Test-Path $apiLog) {
             $errTail = (Get-Content $apiLog -Tail 20 -ErrorAction SilentlyContinue) -join [Environment]::NewLine

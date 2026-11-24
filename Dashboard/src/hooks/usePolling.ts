@@ -22,6 +22,8 @@ export interface PollingOptions<T = unknown> {
    *  payload composto (ex.: `getOverview` → grava `overview.health` em
    *  `"health"`, que outro poller consome). */
   onData?: (data: T) => void;
+  /** Quando false, não agenda nem dispara fetch (mantém `loading: false`). */
+  enabled?: boolean;
 }
 
 const DEFAULT_CACHE_TTL_MS = 30_000;
@@ -45,14 +47,16 @@ export interface PollingState<T> {
 
 const DEFAULT_RATE_LIMIT_BACKOFF_S = 30;
 
+function areDepsEqual(a: unknown[], b: unknown[]): boolean {
+  return a.length === b.length && a.every((d, i) => Object.is(d, b[i]));
+}
+
 /** Devolve a mesma referência enquanto os elementos forem os mesmos (Object.is,
  *  a comparação que o React faz em cada dependência). Permite passar as `deps`
  *  do chamador como UM item das deps do efeito, sem spread. */
 function useStableDeps(deps: unknown[]): unknown[] {
   const ref = useRef(deps);
-  const prev = ref.current;
-  const same = prev.length === deps.length && deps.every((d, i) => Object.is(d, prev[i]));
-  if (!same) ref.current = deps;
+  if (!areDepsEqual(ref.current, deps)) ref.current = deps;
   return ref.current;
 }
 
@@ -72,15 +76,18 @@ export function usePolling<T>(
   deps: unknown[] = [],
   options: PollingOptions<T> = {},
 ): PollingState<T> {
-  const { cacheKey, cacheTtlMs = DEFAULT_CACHE_TTL_MS, skipIfFresh = false, onData } = options;
+  const { cacheKey, cacheTtlMs = DEFAULT_CACHE_TTL_MS, skipIfFresh = false, onData, enabled = true } = options;
   const stableDeps = useStableDeps(deps);
+  const [settledDeps, setSettledDeps] = useState<unknown[]>(stableDeps);
+  const stableDepsRef = useRef(stableDeps);
+  stableDepsRef.current = stableDeps;
   // Semente lida uma única vez, no mount (initializer lazy).
   const [seeded] = useState(() =>
     cacheKey ? readCache<T>(cacheKey, cacheTtlMs) : undefined,
   );
 
   const [data, setData] = useState<T | null>(seeded ?? null);
-  const [loading, setLoading] = useState(seeded === undefined);
+  const [loading, setLoading] = useState(enabled && seeded === undefined);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [rateLimitedUntil, setRateLimitedUntil] = useState<Date | null>(null);
@@ -133,7 +140,10 @@ export function usePolling<T>(
     if (blockedFor > 0) {
       // O `return` abaixo pula o `finally`; sem isto, um refresh disparado já
       // dentro da janela (ex.: remonta durante backoff) deixaria `loading` preso.
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setSettledDeps(stableDepsRef.current);
+      }
       setRefreshQueued(true);
       if (!queuedTimerRef.current) {
         queuedTimerRef.current = setTimeout(() => {
@@ -159,6 +169,7 @@ export function usePolling<T>(
         setError(null);
         setLastUpdated(new Date());
         setLoading(false);
+        setSettledDeps(stableDepsRef.current);
         return;
       }
     }
@@ -199,17 +210,41 @@ export function usePolling<T>(
         setRateLimitedUntil(null);
       }
     } finally {
-      if (isLatest()) setLoading(false);
+      if (isLatest()) {
+        setLoading(false);
+        setSettledDeps(stableDepsRef.current);
+      }
     }
   }, []);
   refreshRef.current = refresh;
 
   useEffect(() => {
+    if (!enabled) {
+      abortRef.current?.abort();
+      setLoading(false);
+      setError(null);
+      setSettledDeps(stableDeps);
+      return;
+    }
+    if (intervalMs <= 0) {
+      setLoading(true);
+      setError(null);
+    }
     void refresh();
     if (intervalMs <= 0) return;
     const id = setInterval(() => void refresh(), intervalMs);
     return () => clearInterval(id);
-  }, [refresh, intervalMs, stableDeps]);
+  }, [refresh, intervalMs, stableDeps, enabled]);
 
-  return { data, loading, error, lastUpdated, rateLimitedUntil, refreshQueued, refresh };
+  const pendingDeps = intervalMs <= 0 && enabled && !areDepsEqual(settledDeps, stableDeps);
+
+  return {
+    data,
+    loading: enabled ? loading || pendingDeps : false,
+    error: pendingDeps ? null : error,
+    lastUpdated,
+    rateLimitedUntil,
+    refreshQueued,
+    refresh,
+  };
 }

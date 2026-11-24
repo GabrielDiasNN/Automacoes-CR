@@ -50,7 +50,11 @@ def get_promovida_card(slug: str, filename: str) -> FileResponse:
         path = promovidas_service.resolver_card_png(root, slug, filename)
     except DomainRuleError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    return FileResponse(path=str(path), media_type="image/png")
+    return FileResponse(
+        path=str(path),
+        media_type="image/png",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/{slug}/history", dependencies=[Depends(get_api_key)])

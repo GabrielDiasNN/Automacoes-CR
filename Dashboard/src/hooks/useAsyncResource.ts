@@ -21,5 +21,5 @@ export function useAsyncResource<T>(
   // `usePolling` lê o fetcher por ref a cada chamada, então este wrapper não
   // precisa de identidade estável (e memoizá-lo exigiria spread em deps).
   const wrapped = (signal?: AbortSignal) => (fetcher ? fetcher(signal) : Promise.resolve(null));
-  return usePolling<T | null>(wrapped, 0, deps, options);
+  return usePolling<T | null>(wrapped, 0, deps, { ...options, enabled: Boolean(fetcher) });
 }

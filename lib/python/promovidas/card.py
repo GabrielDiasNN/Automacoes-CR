@@ -13,6 +13,7 @@ from card_pagination import (
     DEFAULT_MAX_MESSAGE_CHARS,
     MAX_OBS_PER_PAGE,
     cleanup_stale_page_images,
+    paginate_rows,
     write_atomic_text,
 )
 from card_render import (
@@ -43,7 +44,9 @@ _COR_HEADER_PRODUCAO = (56, 189, 248)
 _COR_TEXTO_CLARO = (255, 255, 255)
 
 
-def _resolver_cores_header(cfg: ConfigPromocao) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+def _resolver_cores_header(
+    cfg: ConfigPromocao,
+) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
     cor_hex = cfg.excecao.cor_header if cfg.excecao else None
     if cor_hex:
         r = int(cor_hex[1:3], 16)
@@ -66,11 +69,43 @@ def _valor_card(cfg: ConfigPromocao, row: Mapping[str, Any], col: str) -> str:
     return texto
 
 
+def _colunas_card(cfg: ConfigPromocao) -> tuple[str, ...]:
+    if cfg.excecao and cfg.excecao.colunas_card:
+        return cfg.excecao.colunas_card
+    return cfg.painel.colunas
+
+
 def _formatar_linha_legenda(
     cfg: ConfigPromocao, row: Mapping[str, Any], colunas: Sequence[str]
 ) -> str:
     partes = [f"{col}: {_valor_card(cfg, row, col)}" for col in colunas[:6]]
     return "• " + " | ".join(partes)
+
+
+def _partes_legenda(
+    cfg: ConfigPromocao,
+    rows: Sequence[Mapping[str, Any]],
+    page_info: tuple[int, int] | None,
+    total_geral: int,
+) -> tuple[str, list[str]]:
+    pag = f" (Pág. {page_info[0]}/{page_info[1]})" if page_info else ""
+    titulo = (
+        f"*{cfg.excecao.titulo_alerta if cfg.excecao else cfg.painel.titulo}*"
+        f"{pag} — {total_geral} item(ns)"
+    )
+    cols = _colunas_card(cfg)
+    linhas = [_formatar_linha_legenda(cfg, r, cols) for r in rows]
+    return titulo, linhas
+
+
+def _montar_legenda_bruta(
+    cfg: ConfigPromocao,
+    rows: Sequence[Mapping[str, Any]],
+    page_info: tuple[int, int] | None,
+    total_geral: int,
+) -> str:
+    titulo, linhas = _partes_legenda(cfg, rows, page_info, total_geral)
+    return "\n".join([titulo, *linhas]) if linhas else titulo
 
 
 def _montar_legenda(
@@ -79,13 +114,7 @@ def _montar_legenda(
     page_info: tuple[int, int] | None,
     total_geral: int,
 ) -> str:
-    pag = f" (Pág. {page_info[0]}/{page_info[1]})" if page_info else ""
-    titulo = (
-        f"*{cfg.excecao.titulo_alerta if cfg.excecao else cfg.painel.titulo}*"
-        f"{pag} — {total_geral} item(ns)"
-    )
-    cols = cfg.excecao.colunas_card if cfg.excecao else cfg.painel.colunas
-    linhas = [_formatar_linha_legenda(cfg, r, cols) for r in rows]
+    titulo, linhas = _partes_legenda(cfg, rows, page_info, total_geral)
     return truncate_message(titulo, linhas, max_chars=DEFAULT_MAX_MESSAGE_CHARS)
 
 
@@ -96,7 +125,7 @@ def _desenhar_linha_card(
     idx: int,
     fonts: dict[str, Any],
 ) -> None:
-    cols = cfg.excecao.colunas_card if cfg.excecao else cfg.painel.colunas
+    cols = _colunas_card(cfg)
     y0 = HEADER_H + idx * OB_ROW_H
     if idx > 0:
         draw.line([(PAD, y0), (CARD_W - PAD, y0)], fill=DIVIDER_COLOR, width=1)
@@ -119,9 +148,7 @@ def _render_pagina_png(
     fonts = load_card_fonts()
     footer_y = HEADER_H + OB_ROW_H * len(page_rows)
     header_bg, header_fg = _resolver_cores_header(cfg)
-    titulo = (
-        f"{cfg.excecao.titulo_alerta if cfg.excecao else cfg.painel.titulo}"
-    )
+    titulo = f"{cfg.excecao.titulo_alerta if cfg.excecao else cfg.painel.titulo}"
 
     def _draw(draw: ImageDraw.ImageDraw) -> None:
         draw.rectangle([(0, 0), (CARD_W, HEADER_H)], fill=header_bg)
@@ -158,12 +185,19 @@ def gerar_artefatos_whatsapp(
     if not pendentes:
         raise ValueError("gerar_artefatos_whatsapp exige ao menos uma linha pendente.")
     cleanup_stale_page_images(str(pasta_trabalho))
-    paginas = [
-        list(pendentes[i : i + MAX_OBS_PER_PAGE])
-        for i in range(0, len(pendentes), MAX_OBS_PER_PAGE)
-    ]
-    total_pags = len(paginas)
     total_geral = len(pendentes)
+    paginas = paginate_rows(
+        [dict(r) for r in pendentes],
+        lambda rows_pag, page_info, total_obs: _montar_legenda_bruta(
+            cfg,
+            rows_pag,
+            page_info,
+            total_obs if total_obs is not None else total_geral,
+        ),
+        per_page=MAX_OBS_PER_PAGE,
+        max_chars=DEFAULT_MAX_MESSAGE_CHARS,
+    )
+    total_pags = len(paginas)
     manifest: list[dict[str, Any]] = []
 
     for idx, page_rows in enumerate(paginas, start=1):

@@ -330,7 +330,7 @@ function Invoke-WhatsAppDaemonBatch {
         if (-not [string]::IsNullOrWhiteSpace($texto)) {
             try {
                 $objeto = $texto | ConvertFrom-Json
-                if ($null -ne $objeto.PSObject.Properties["results"]) { $resultados = @($objeto.results) }
+                if ($null -ne $objeto.PSObject.Properties["results"] -and $null -ne $objeto.results) { $resultados = @($objeto.results) }
             }
             catch [System.Exception] {
                 $resultados = $null

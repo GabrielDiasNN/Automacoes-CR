@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { orchestratorApi } from "../api/orchestrator";
 import { ToastProvider } from "../components/ui";
+import { _clearCache } from "../lib/resourceCache";
 import { PainelPage } from "../pages/PainelPage";
 
 const OVERVIEW_MOCK = {
@@ -110,6 +111,7 @@ function renderPainel() {
 
 describe("PainelPage — Visão Geral Command Center", () => {
   afterEach(() => {
+    _clearCache();
     vi.restoreAllMocks();
   });
 
@@ -133,6 +135,22 @@ describe("PainelPage — Visão Geral Command Center", () => {
           cards_count: 17,
           kpis: {},
         },
+        {
+          slug: "rama-pulmao",
+          codigo: "CP-02",
+          nome: "Pulmão Ramas",
+          titulo: "Pulmão das Ramas",
+          setor: "Acabamento & Ramas",
+          modo: "sombra",
+          destinos: ["dashboard"],
+          has_snapshot: true,
+          generated_at: "2026-11-22T14:00:00Z",
+          age_minutes: 10,
+          total_rows: 12,
+          excecoes_count: 0,
+          cards_count: 0,
+          kpis: {},
+        },
       ],
     });
     vi.spyOn(orchestratorApi, "getBeneficiamentoOverview").mockResolvedValue({
@@ -151,11 +169,14 @@ describe("PainelPage — Visão Geral Command Center", () => {
     expect(await screen.findByText("125.000")).toBeInTheDocument();
     expect(screen.getByText("17 cards")).toBeInTheDocument();
     expect(screen.getByText("250 exceções")).toBeInTheDocument();
+    expect(screen.getByText("Pulmão Ramas")).toBeInTheDocument();
     expect(screen.getByText("Sucesso")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Somente alertas" }));
     expect(screen.getByRole("button", { name: "Mostrar todos" })).toBeInTheDocument();
+    expect(screen.queryByText("Pulmão Ramas")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mostrar todos" }));
+    expect(screen.getByText("Pulmão Ramas")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("17 cards"));
     expect(await screen.findByText("DESTINO_PCP")).toBeInTheDocument();

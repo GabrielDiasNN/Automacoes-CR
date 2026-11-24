@@ -159,6 +159,9 @@ export function ExecucoesPage() {
   useEffect(() => {
     setLiveLogText("");
   }, [selectedId]);
+  const onLogOpen = useCallback(() => {
+    setLiveLogText("");
+  }, []);
   const onLogMessage = useCallback((evt: MessageEvent) => {
     setLiveLogText((prev) => appendCappedLog(prev, evt.data as string));
   }, []);
@@ -166,7 +169,7 @@ export function ExecucoesPage() {
   const { status: logWsStatus } = useWebSocket(
     selectedId ? `/ws/logs/${selectedId}` : "",
     getApiKey(),
-    { onMessage: onLogMessage, enabled: !!selectedId && isRunning },
+    { onOpen: onLogOpen, onMessage: onLogMessage, enabled: !!selectedId && isRunning },
   );
   // O replay do histórico é auto-suficiente (o backend manda o log inteiro no
   // connect) — usa o acumulado do WS assim que algo chegou; senão cai no
@@ -474,6 +477,7 @@ export function ExecucoesPage() {
         {selectedId &&
           (detail ? (
             <ExecDetailBody
+              key={detail.id}
               detail={detail}
               loading={detailLoading}
               logsText={logsText}

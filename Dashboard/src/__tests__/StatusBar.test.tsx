@@ -1,9 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { StatusBar } from "../components/StatusBar";
 import * as LiveStatusCtx from "../context/LiveStatusContext";
 
 describe("StatusBar", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   const workerMock = {
     is_alive: true,
     pid: 101,

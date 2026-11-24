@@ -175,11 +175,29 @@ describe("useFocusTrap", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(document.activeElement).toBe(trigger);
 
-    // Abrir novamente e desmontar também restaura o foco anterior
-    fireEvent.click(trigger);
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Primeiro" }));
+    // Abrir novamente e desmontar filho do diálogo mantém o foco no trigger externo
+    function ExternalTriggerHarness({ showDialog }: { showDialog: boolean }) {
+      const ref = useRef<HTMLDivElement>(null);
+      useFocusTrap(ref, showDialog, () => {});
+      return (
+        <div>
+          <button type="button">Trigger Externo</button>
+          {showDialog && (
+            <div ref={ref} tabIndex={-1}>
+              <button type="button">Dentro</button>
+            </div>
+          )}
+        </div>
+      );
+    }
     unmount();
-    expect(document.activeElement).toBe(document.body);
+    const ext = render(<ExternalTriggerHarness showDialog={false} />);
+    const extTrigger = screen.getByRole("button", { name: "Trigger Externo" });
+    extTrigger.focus();
+    ext.rerender(<ExternalTriggerHarness showDialog />);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Dentro" }));
+    ext.rerender(<ExternalTriggerHarness showDialog={false} />);
+    expect(document.activeElement).toBe(extTrigger);
   });
 
   it("foca o próprio container e bloqueia Tab quando não há elementos focáveis", () => {

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { getApiKey, setUnauthorizedHandler } from "../api/client";
+import { getApiKey, setApiKey, setUnauthorizedHandler } from "../api/client";
 import { ApiKeyGate } from "../components/ApiKeyGate";
 import { ApiKeyProvider, useApiKeyContext } from "../context/ApiKeyContext";
 
@@ -17,6 +17,7 @@ function ContextProbe() {
 describe("ApiKeyContext e ApiKeyGate", () => {
   afterEach(() => {
     sessionStorage.clear();
+    setApiKey("");
     setUnauthorizedHandler(null);
   });
 
@@ -47,8 +48,8 @@ describe("ApiKeyContext e ApiKeyGate", () => {
     expect(screen.getByTestId("ctx-key")).toHaveTextContent("chave-segura-123");
     expect(getApiKey()).toBe("chave-segura-123");
 
-    // Simular logout / limpeza de chave
+    // Simular logout / limpeza de chave — campo não deve voltar preenchido
     fireEvent.click(screen.getByRole("button", { name: "Sair" }));
-    expect(screen.getByLabelText("API Key")).toBeInTheDocument();
+    expect(screen.getByLabelText<HTMLInputElement>("API Key").value).toBe("");
   });
 });

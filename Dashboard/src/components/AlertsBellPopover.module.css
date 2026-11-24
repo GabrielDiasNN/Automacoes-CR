@@ -17,7 +17,7 @@
   padding: 0 4px;
   border-radius: 999px;
   background: var(--red, #e5484d);
-  color: #ffffff;
+  color: var(--bg);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: var(--fw-bold, 700);
@@ -43,13 +43,19 @@
   overflow: hidden;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 560px) {
   .popover {
     position: fixed;
     top: var(--topbar-h, 52px);
     left: var(--sp-3, 12px);
     right: var(--sp-3, 12px);
     width: auto;
+  }
+}
+
+@media (max-width: 400px) {
+  .popover {
+    top: 96px;
   }
 }
 
@@ -203,4 +209,13 @@
   text-align: center;
   color: var(--text-mid);
   font-size: var(--fs-small, 0.8125rem);
+}
+
+.staleNotice {
+  margin: var(--sp-1, 4px) var(--sp-3, 12px);
+  padding: var(--sp-2, 8px) var(--sp-3, 12px);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--amber-tint);
+  color: var(--amber);
+  font-size: var(--fs-label, 0.7rem);
 }

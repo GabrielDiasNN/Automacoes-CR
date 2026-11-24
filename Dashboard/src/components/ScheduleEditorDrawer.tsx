@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CalendarClock, CheckCircle2, Eye, Save } from "lucide-react";
 import { orchestratorApi, type Automation, type SchedulePreviewResponse } from "../api/orchestrator";
 import { Button, Card, Drawer, Input, Select, StatusTag, useToast } from "./ui";
@@ -16,6 +16,8 @@ const WEEKDAYS = [
   { id: 6, label: "Sáb" },
   { id: 0, label: "Dom" },
 ];
+const ALL_WEEKDAYS = [1, 2, 3, 4, 5, 6, 0];
+const HH_MM_24H_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 interface ParsedForm {
   kind: ScheduleKind;
@@ -23,6 +25,7 @@ interface ParsedForm {
   intervalMinutes: number;
   startTime: string;
   endTime: string;
+  anchorTime: string;
   days: number[];
   cronExpressions: string;
   cronWasArray: boolean;
@@ -41,6 +44,25 @@ function formatTimeEntry(entry: unknown): string | null {
     }
   }
   return null;
+}
+
+function findInvalidTimes(raw: string): string[] {
+  const invalid: string[] = [];
+  for (const part of raw.split(",")) {
+    const clean = part.trim();
+    if (!clean) continue;
+    const match = /^(\d{1,2}):(\d{2})$/.exec(clean);
+    if (!match) {
+      invalid.push(clean);
+      continue;
+    }
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    if (h < 0 || h > 23 || m < 0 || m > 59) {
+      invalid.push(clean);
+    }
+  }
+  return invalid;
 }
 
 function parseTimesToBackend(raw: string): { h: number; m: number }[] {
@@ -72,8 +94,9 @@ function parseInitialSchedule(raw: string | null): ParsedForm {
     intervalMinutes: 60,
     startTime: "05:00",
     endTime: "19:00",
+    anchorTime: "",
     days: [1, 2, 3, 4, 5],
-    cronExpressions: "0 7-17 * * 1-5",
+    cronExpressions: "0 7-17 * * mon-fri",
     cronWasArray: false,
     preservedKind: null,
     preservedRaw: null,
@@ -87,6 +110,7 @@ function parseInitialSchedule(raw: string | null): ParsedForm {
     const timesArr = Array.isArray(obj.times)
       ? obj.times.map(formatTimeEntry).filter((v): v is string => v !== null)
       : [];
+    const hasExplicitDays = Array.isArray(obj.days_of_week) || Array.isArray(obj.daysOfWeek);
     const rawDays = Array.isArray(obj.days_of_week)
       ? obj.days_of_week
       : Array.isArray(obj.daysOfWeek)
@@ -100,13 +124,20 @@ function parseInitialSchedule(raw: string | null): ParsedForm {
       : typeof cronRaw === "string" && cronRaw.trim()
         ? [cronRaw.trim()]
         : [];
+    const intervalStart =
+      typeof obj.start_time === "string" ? obj.start_time.trim() : st === "interval" ? "" : fallback.startTime;
+    const intervalEnd =
+      typeof obj.end_time === "string" ? obj.end_time.trim() : st === "interval" ? "" : fallback.endTime;
+    const intervalDays = hasExplicitDays ? daysArr : st === "interval" ? ALL_WEEKDAYS : fallback.days;
+
     return {
       kind,
       times: timesArr.length > 0 ? timesArr.join(", ") : fallback.times,
       intervalMinutes: Number(obj.interval_minutes ?? obj.every_minutes ?? 60) || 60,
-      startTime: typeof obj.start_time === "string" ? obj.start_time : fallback.startTime,
-      endTime: typeof obj.end_time === "string" ? obj.end_time : fallback.endTime,
-      days: daysArr.length > 0 ? daysArr : fallback.days,
+      startTime: intervalStart,
+      endTime: intervalEnd,
+      anchorTime: typeof obj.anchor_time === "string" ? obj.anchor_time.trim() : "",
+      days: intervalDays,
       cronExpressions: cronList.length > 0 ? cronList.join("; ") : fallback.cronExpressions,
       cronWasArray,
       preservedKind: kind === "preserved" ? st : null,
@@ -152,10 +183,11 @@ function buildScheduleJson(form: ParsedForm): string | null {
   return JSON.stringify({
     schedule_version: 2,
     schedule_type: "interval",
-    interval_minutes: Math.max(1, form.intervalMinutes),
-    days_of_week: form.days,
-    start_time: form.startTime || undefined,
-    end_time: form.endTime || undefined,
+    interval_minutes: Math.min(1440, Math.max(1, Math.floor(form.intervalMinutes))),
+    days_of_week: form.days.length === ALL_WEEKDAYS.length ? undefined : form.days,
+    start_time: form.startTime.trim() || undefined,
+    end_time: form.endTime.trim() || undefined,
+    anchor_time: form.anchorTime.trim() || undefined,
     timezone: "America/Sao_Paulo",
   });
 }
@@ -171,19 +203,21 @@ export function ScheduleEditorDrawer({
 }) {
   const toast = useToast();
   const [form, setForm] = useState<ParsedForm>(() => parseInitialSchedule(null));
-  const [slaMinutes, setSlaMinutes] = useState("");
-  const [maxRuntime, setMaxRuntime] = useState("30");
-  const [maxRetries, setMaxRetries] = useState("0");
   const [preview, setPreview] = useState<SchedulePreviewResponse | null>(null);
   const [busy, setBusy] = useState<"preview" | "save" | null>(null);
+  const requestSeqRef = useRef(0);
 
   useEffect(() => {
-    if (!automation) return;
-    setForm(parseInitialSchedule(automation.schedule));
-    setSlaMinutes(automation.sla_minutes != null ? String(automation.sla_minutes) : "");
-    setMaxRuntime(String(automation.max_runtime_minutes));
-    setMaxRetries(String(automation.max_retries));
+    const seq = ++requestSeqRef.current;
+    setBusy(null);
     setPreview(null);
+    if (!automation) return () => {
+      if (requestSeqRef.current === seq) requestSeqRef.current += 1;
+    };
+    setForm(parseInitialSchedule(automation.schedule));
+    return () => {
+      if (requestSeqRef.current === seq) requestSeqRef.current += 1;
+    };
   }, [automation]);
 
   const toggleDay = (day: number) => {
@@ -193,59 +227,102 @@ export function ScheduleEditorDrawer({
     }));
   };
 
+  const validateForm = (): string | null => {
+    if (form.kind === "daily" || form.kind === "weekly") {
+      const invalid = findInvalidTimes(form.times);
+      if (invalid.length > 0) {
+        return `Horário(s) inválido(s): ${invalid.join(", ")}. Use o formato HH:MM.`;
+      }
+      if (parseTimesToBackend(form.times).length === 0) {
+        return "Informe ao menos um horário válido no formato HH:MM.";
+      }
+    }
+    if ((form.kind === "weekly" || form.kind === "interval") && form.days.length === 0) {
+      return "Selecione ao menos um dia da semana.";
+    }
+    if (form.kind === "interval") {
+      if (!Number.isInteger(form.intervalMinutes) || form.intervalMinutes < 1 || form.intervalMinutes > 1440) {
+        return "Intervalo deve ser um número inteiro entre 1 e 1440 minutos.";
+      }
+      const st = form.startTime.trim();
+      const et = form.endTime.trim();
+      if (st && !HH_MM_24H_RE.test(st)) {
+        return "Horário inicial inválido. Use HH:MM (00:00 a 23:59).";
+      }
+      if (et && !HH_MM_24H_RE.test(et)) {
+        return "Horário final inválido. Use HH:MM (00:00 a 23:59).";
+      }
+      if (st && et && st > et) {
+        return "Horário inicial da janela não pode ser maior que o horário final.";
+      }
+    }
+    if (form.kind === "cron") {
+      const exprs = parseCronList(form.cronExpressions);
+      if (exprs.length === 0) {
+        return "Informe ao menos uma expressão cron válida.";
+      }
+      if (exprs.some((expr) => expr.split(/\s+/).length !== 5)) {
+        return "Cada expressão cron deve conter exatamente 5 campos (ex.: 0 7-17 * * mon-fri).";
+      }
+    }
+    return null;
+  };
+
   const runPreview = async () => {
+    const validationErr = validateForm();
+    if (validationErr) {
+      toast(validationErr, "red");
+      return;
+    }
+    const seq = requestSeqRef.current;
     setBusy("preview");
     try {
       const schedule = buildScheduleJson(form);
       const res = await orchestratorApi.previewSchedule(schedule, 5);
+      if (seq !== requestSeqRef.current) return;
       setPreview(res);
     } catch (e) {
+      if (seq !== requestSeqRef.current) return;
       toast(errMessage(e), "red");
     } finally {
-      setBusy(null);
+      if (seq === requestSeqRef.current) setBusy(null);
     }
   };
 
   const save = async () => {
-    if (!automation) return;
-    if ((form.kind === "daily" || form.kind === "weekly") && parseTimesToBackend(form.times).length === 0) {
-      toast("Informe ao menos um horário válido no formato HH:MM.", "red");
+    if (!automation || form.kind === "preserved") return;
+    const validationErr = validateForm();
+    if (validationErr) {
+      toast(validationErr, "red");
       return;
     }
-    if (form.kind === "weekly" && form.days.length === 0) {
-      toast("Selecione ao menos um dia da semana.", "red");
-      return;
-    }
-    if (form.kind === "cron" && parseCronList(form.cronExpressions).length === 0) {
-      toast("Informe ao menos uma expressão cron válida.", "red");
-      return;
-    }
+    const seq = requestSeqRef.current;
     setBusy("save");
     try {
-      const slaNum = slaMinutes.trim() ? Number(slaMinutes) : null;
-      const payload: Parameters<typeof orchestratorApi.updateAutomation>[1] = {
-        sla_minutes: slaNum && Number.isFinite(slaNum) ? slaNum : null,
-        max_runtime_minutes: Math.max(1, Number(maxRuntime) || automation.max_runtime_minutes),
-        max_retries: Math.max(0, Number(maxRetries) || 0),
-      };
-      if (form.kind !== "preserved") {
-        payload.schedule = buildScheduleJson(form);
-      }
-      await orchestratorApi.updateAutomation(automation.id, payload);
+      await orchestratorApi.updateAutomation(automation.id, {
+        schedule: buildScheduleJson(form),
+      });
+      if (seq !== requestSeqRef.current) return;
       toast(`Agenda de "${automation.name}" atualizada.`, "green");
       onSaved();
       onClose();
     } catch (e) {
+      if (seq !== requestSeqRef.current) return;
       toast(errMessage(e), "red");
     } finally {
-      setBusy(null);
+      if (seq === requestSeqRef.current) setBusy(null);
     }
+  };
+
+  const handleClose = () => {
+    if (busy === "save") return;
+    onClose();
   };
 
   return (
     <Drawer
       open={!!automation}
-      onClose={onClose}
+      onClose={handleClose}
       eyebrow="Configuração de Agenda & SLA"
       title={automation?.name}
       width={560}
@@ -264,7 +341,7 @@ export function ScheduleEditorDrawer({
                   onChange={(e) => setForm((p) => ({ ...p, kind: e.target.value as ScheduleKind }))}
                   aria-label="Tipo de agendamento"
                 >
-                  {form.kind === "preserved" && (
+                  {form.preservedRaw !== null && (
                     <option value="preserved">
                       Preservado ({form.preservedKind ?? "avançado"})
                     </option>
@@ -279,21 +356,21 @@ export function ScheduleEditorDrawer({
 
               {form.kind === "preserved" && (
                 <p style={{ margin: 0, fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-                  Agenda atual ({automation.schedule_summary ?? form.preservedKind ?? "avançada"}) será preservada
-                  inalterada ao salvar parâmetros operacionais.
+                  Agenda atual ({automation.schedule_summary ?? form.preservedKind ?? "avançada"}) está preservada
+                  inalterada. Para substituí-la, escolha outro tipo de agendamento acima.
                 </p>
               )}
 
               {form.kind === "cron" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <label htmlFor="sched-cron" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-                    Expressões cron (5 campos, separadas por ponto e vírgula)
+                    Expressões cron (5 campos, separadas por ponto e vírgula; dia da semana: 0=Seg..6=Dom ou mon-sun)
                   </label>
                   <Input
                     id="sched-cron"
                     value={form.cronExpressions}
                     onChange={(e) => setForm((p) => ({ ...p, cronExpressions: e.target.value }))}
-                    placeholder="0 7-17 * * 1-5"
+                    placeholder="0 7-17 * * mon-fri"
                     aria-label="Expressões cron"
                   />
                 </div>
@@ -326,14 +403,14 @@ export function ScheduleEditorDrawer({
                       min={1}
                       max={1440}
                       value={String(form.intervalMinutes)}
-                      onChange={(e) => setForm((p) => ({ ...p, intervalMinutes: Number(e.target.value) || 1 }))}
+                      onChange={(e) => setForm((p) => ({ ...p, intervalMinutes: Number(e.target.value) || 0 }))}
                       aria-label="Intervalo em minutos"
                     />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-2)" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       <label htmlFor="sched-start" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-                        Início
+                        Início (opcional)
                       </label>
                       <Input
                         id="sched-start"
@@ -345,7 +422,7 @@ export function ScheduleEditorDrawer({
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       <label htmlFor="sched-end" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-                        Fim
+                        Fim (opcional)
                       </label>
                       <Input
                         id="sched-end"
@@ -362,7 +439,7 @@ export function ScheduleEditorDrawer({
               {(form.kind === "weekly" || form.kind === "interval") && (
                 <div>
                   <div className={page.sectionLabel}>Dias da semana</div>
-                  <div style={{ display: "flex", gap: "var(--sp-1)", flexWrap: "wrap" }}>
+                  <div role="group" aria-label="Dias da semana" style={{ display: "flex", gap: "var(--sp-1)", flexWrap: "wrap" }}>
                     {WEEKDAYS.map((d) => {
                       const active = form.days.includes(d.id);
                       return (
@@ -370,6 +447,7 @@ export function ScheduleEditorDrawer({
                           key={d.id}
                           size="sm"
                           variant={active ? "primary" : "ghost"}
+                          aria-pressed={active}
                           onClick={() => toggleDay(d.id)}
                         >
                           {d.label}
@@ -382,50 +460,49 @@ export function ScheduleEditorDrawer({
             </div>
           </Card>
 
-          <Card label="Parâmetros Operacionais">
-            <div className={page.tiles}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label htmlFor="sched-sla" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-                  SLA (min)
-                </label>
-                <Input
-                  id="sched-sla"
-                  type="number"
-                  min={1}
-                  value={slaMinutes}
-                  onChange={(e) => setSlaMinutes(e.target.value)}
-                  placeholder="ex: 60"
-                  aria-label="SLA em minutos"
-                />
+          <Card label="Parâmetros Operacionais (Manifesto)">
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+              <div className={page.tiles}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <label htmlFor="sched-sla" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
+                    SLA (min)
+                  </label>
+                  <Input
+                    id="sched-sla"
+                    value={automation.sla_minutes != null ? String(automation.sla_minutes) : "—"}
+                    readOnly
+                    disabled
+                    aria-label="SLA em minutos"
+                  />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <label htmlFor="sched-timeout" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
+                    Timeout (min)
+                  </label>
+                  <Input
+                    id="sched-timeout"
+                    value={String(automation.max_runtime_minutes)}
+                    readOnly
+                    disabled
+                    aria-label="Tempo máximo de execução"
+                  />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <label htmlFor="sched-retries" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
+                    Tentativas (retries)
+                  </label>
+                  <Input
+                    id="sched-retries"
+                    value={String(automation.max_retries)}
+                    readOnly
+                    disabled
+                    aria-label="Máximo de retentativas"
+                  />
+                </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label htmlFor="sched-timeout" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-                  Timeout (min)
-                </label>
-                <Input
-                  id="sched-timeout"
-                  type="number"
-                  min={1}
-                  max={480}
-                  value={maxRuntime}
-                  onChange={(e) => setMaxRuntime(e.target.value)}
-                  aria-label="Tempo máximo de execução"
-                />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label htmlFor="sched-retries" style={{ fontSize: "var(--fs-small)", color: "var(--text-mid)" }}>
-                  Tentativas (retries)
-                </label>
-                <Input
-                  id="sched-retries"
-                  type="number"
-                  min={0}
-                  max={10}
-                  value={maxRetries}
-                  onChange={(e) => setMaxRetries(e.target.value)}
-                  aria-label="Máximo de retentativas"
-                />
-              </div>
+              <p style={{ margin: 0, fontSize: "var(--fs-label)", color: "var(--text-lo)" }}>
+                Parâmetros governados por automation.manifest.json (somente leitura neste editor).
+              </p>
             </div>
           </Card>
 
@@ -467,14 +544,14 @@ export function ScheduleEditorDrawer({
               {busy === "preview" ? "Simulando…" : "Simular próximas execuções"}
             </Button>
             <span className={page.filler} />
-            <Button size="sm" variant="subtle" onClick={onClose} disabled={busy === "save"}>
+            <Button size="sm" variant="subtle" onClick={handleClose} disabled={busy === "save"}>
               Cancelar
             </Button>
             <Button
               size="sm"
               variant="primary"
               icon={busy === "save" ? <CheckCircle2 size={13} /> : <Save size={13} />}
-              disabled={busy !== null}
+              disabled={busy !== null || form.kind === "preserved"}
               onClick={() => void save()}
             >
               {busy === "save" ? "Salvando…" : "Salvar alterações"}

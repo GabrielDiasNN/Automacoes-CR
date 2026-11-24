@@ -145,6 +145,13 @@ def test_api_promovidas_lista_latest_historico_e_erros(
         ).status_code
         == 400
     )
+    assert client.get("/api/promovidas/").status_code == 403
+    assert client.get("/api/promovidas/rama-risco-atraso/latest").status_code == 403
+    assert client.get("/api/promovidas/rama-risco-atraso/history").status_code == 403
+    assert (
+        client.get("/api/promovidas/rama-risco-atraso/cards/card.png").status_code
+        == 403
+    )
 
 
 @pytest.mark.integracao
@@ -156,7 +163,10 @@ def test_preflight_aceita_consulta_promovida_sem_whatsapp_config(
     monkeypatch.setattr("app.routers.automations.PROJECT_ROOT", str(root))
     manifest = json.loads(
         (
-            root / "Consultas Promovidas" / "rama-risco-atraso" / "automation.manifest.json"
+            root
+            / "Consultas Promovidas"
+            / "rama-risco-atraso"
+            / "automation.manifest.json"
         ).read_text(encoding="utf-8")
     )
     payload = {
@@ -286,6 +296,7 @@ def test_api_promovidas_inclui_automacoes_e_serve_cards_png(
     )
     assert card_ok.status_code == 200
     assert card_ok.headers["content-type"] == "image/png"
+    assert card_ok.headers.get("cache-control") == "no-cache"
     assert card_ok.content == png_bytes
 
     card_bad_ext = client.get(
@@ -297,6 +308,40 @@ def test_api_promovidas_inclui_automacoes_e_serve_cards_png(
         "/api/promovidas/obs-paradas-fase/cards/INEXISTENTE.png", headers=AUTH_HEADERS
     )
     assert card_not_found.status_code == 404
+
+
+@pytest.mark.integracao
+def test_api_promovidas_ofst_cards_na_raiz(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OFST-06 le cards_manifest.json e card.png gravados na raiz da pasta."""
+    png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+    pasta_ofst = tmp_path / "OBs Fluxo Sem Tingimento"
+    pasta_ofst.mkdir(parents=True)
+    (pasta_ofst / "card.png").write_bytes(png_bytes)
+    (pasta_ofst / "cards_manifest.json").write_text(
+        json.dumps([{"phase_key": "p1", "image_path": "card.png", "caption": "OFST"}]),
+        encoding="utf-8",
+    )
+    (pasta_ofst / "ofst_result.json").write_text(
+        json.dumps({"rows": [{"OB": "1"}], "extracted_at": "2026-11-22T14:00:00"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "app.routers.promovidas.get_project_root", lambda: str(tmp_path)
+    )
+    snap_ofst = client.get(
+        "/api/promovidas/obs-fluxo-sem-tingimento/latest", headers=AUTH_HEADERS
+    )
+    assert snap_ofst.status_code == 200
+    assert len(snap_ofst.json()["cards"]) == 1
+    assert (
+        client.get(
+            "/api/promovidas/obs-fluxo-sem-tingimento/cards/card.png",
+            headers=AUTH_HEADERS,
+        ).status_code
+        == 200
+    )
 
 
 @pytest.mark.unitario
@@ -371,15 +416,28 @@ def test_promovidas_extracao_montagem_e_cards(tmp_path: Path) -> None:
     pasta_obs = tmp_path / "OBs Paradas Fase"
     (pasta_obs / "images").mkdir(parents=True)
     (pasta_obs / "images" / "A.png").write_bytes(b"png")
-    (pasta_obs / "images" / "B.png").write_bytes(b"png")
+    (pasta_obs / "images" / "OBSOLETO.png").write_bytes(b"png")
     (pasta_obs / "phase_cards.json").write_text(
-        json.dumps(["ignorar", {"image": "images/A.png"}, {"image": "images/A.png"}]),
+        json.dumps(
+            [
+                "ignorar",
+                {
+                    "phase_key": "A",
+                    "phase_display": "Fase A",
+                    "image_path": "images/A.png",
+                    "caption": "Cap A",
+                },
+                {"image_path": "images/A.png"},
+            ]
+        ),
         encoding="utf-8",
     )
     cards_obs = _coletar_cards_automacao(
         pasta_obs, _AUTOMACOES_POR_SLUG["obs-paradas-fase"]
     )
-    assert [c["filename"] for c in cards_obs] == ["A.png", "B.png"]
+    assert [c["filename"] for c in cards_obs] == ["A.png"]
+    assert cards_obs[0]["title"] == "Fase A"
+    assert cards_obs[0]["caption"] == "Cap A"
 
 
 @pytest.mark.unitario
@@ -387,7 +445,12 @@ def test_promovidas_extracao_receitas_e_erros_404(tmp_path: Path) -> None:
     pasta_rb = tmp_path / "Receitas Bloqueadas"
     pasta_rb.mkdir(parents=True)
     (pasta_rb / "receitas_state.json").write_text(
-        json.dumps({"records": {"1": {"REC": "1"}}}),
+        json.dumps(
+            {
+                "updated_at": "2026-11-23T13:00:00",
+                "records": [{"REC": "1"}],
+            }
+        ),
         encoding="utf-8",
     )
     (pasta_rb / "rb_result.json").write_text(
@@ -403,7 +466,10 @@ def test_promovidas_extracao_receitas_e_erros_404(tmp_path: Path) -> None:
         pasta_rb, _AUTOMACOES_POR_SLUG["receitas-bloqueadas"]
     )
     assert isinstance(rows_rb, list)
-    assert kpis_rb["lidos"] == 1
+    assert len(rows_rb) == 1
+    assert kpis_rb["count"] == 1
+    assert kpis_rb["novos"] == 2
+    assert kpis_rb["alterados"] == 1
 
     pasta_re = tmp_path / "Receitas Emitidas"
     pasta_re.mkdir(parents=True)

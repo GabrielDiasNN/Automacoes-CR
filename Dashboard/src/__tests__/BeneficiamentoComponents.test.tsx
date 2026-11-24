@@ -72,7 +72,10 @@ const DETAIL_PAYLOAD: BeneficiamentoDetail = {
 };
 
 describe("Beneficiamento — FilterBar, DetailDrawer e ProductAutocomplete", () => {
+  let originalMatchMedia: PropertyDescriptor | undefined;
+
   beforeEach(() => {
+    originalMatchMedia = Object.getOwnPropertyDescriptor(window, "matchMedia");
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       configurable: true,
@@ -90,6 +93,11 @@ describe("Beneficiamento — FilterBar, DetailDrawer e ProductAutocomplete", () 
   });
 
   afterEach(() => {
+    if (originalMatchMedia) {
+      Object.defineProperty(window, "matchMedia", originalMatchMedia);
+    } else {
+      delete (window as unknown as { matchMedia?: unknown }).matchMedia;
+    }
     vi.useRealTimers();
     vi.restoreAllMocks();
   });

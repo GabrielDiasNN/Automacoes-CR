@@ -34,11 +34,13 @@ interface CardImageProps {
 function CardImageItem({ slug, card, onOpen }: CardImageProps) {
   const [state, setState] = useState<LoadedCardState>({ blob: null, src: null, failed: false });
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     let objectUrl: string | null = null;
     setState({ blob: null, src: null, failed: false });
+    setCopied(false);
 
     orchestratorApi
       .getPromovidaCardBlob(slug, card.filename, controller.signal)
@@ -54,6 +56,10 @@ function CardImageItem({ slug, card, onOpen }: CardImageProps) {
     return () => {
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
     };
   }, [slug, card.filename]);
 
@@ -62,7 +68,11 @@ function CardImageItem({ slug, card, onOpen }: CardImageProps) {
     try {
       await navigator.clipboard.write([new ClipboardItem({ [state.blob.type || "image/png"]: state.blob })]);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = null;
+        setCopied(false);
+      }, 1800);
     } catch {
       // ignora silenciosamente se o navegador bloquear clipboard sem foco/HTTPS
     }
@@ -134,6 +144,7 @@ function CardLightbox({
   cards,
   activeIndex,
   initialSrc,
+  initialBlob,
   onClose,
   onSelectIndex,
 }: {
@@ -141,31 +152,46 @@ function CardLightbox({
   cards: PromovidaCard[];
   activeIndex: number;
   initialSrc: string | null;
+  initialBlob: Blob | null;
   onClose: () => void;
   onSelectIndex: (idx: number) => void;
 }) {
   const card = cards[activeIndex];
+  const cardFilename = card?.filename;
   const [src, setSrc] = useState<string | null>(initialSrc);
-  const [blob, setBlob] = useState<Blob | null>(null);
+  const [blob, setBlob] = useState<Blob | null>(initialBlob);
   const [failed, setFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null!);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useFocusTrap(boxRef, Boolean(card), onClose);
   useOverlayDismiss(overlayRef, Boolean(card), onClose);
 
   useEffect(() => {
-    if (!card) return;
-    const controller = new AbortController();
-    let objectUrl: string | null = null;
-    setSrc(initialSrc);
-    setBlob(null);
+    if (!cardFilename) return;
     setFailed(false);
     setCopied(false);
 
+    if (initialSrc && initialBlob) {
+      setSrc(initialSrc);
+      setBlob(initialBlob);
+      return () => {
+        if (copyTimerRef.current) {
+          clearTimeout(copyTimerRef.current);
+          copyTimerRef.current = null;
+        }
+      };
+    }
+
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    setSrc(initialSrc);
+    setBlob(initialBlob);
+
     orchestratorApi
-      .getPromovidaCardBlob(slug, card.filename, controller.signal)
+      .getPromovidaCardBlob(slug, cardFilename, controller.signal)
       .then((b) => {
         if (controller.signal.aborted) return;
         objectUrl = URL.createObjectURL(b);
@@ -183,19 +209,24 @@ function CardLightbox({
     return () => {
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
     };
-  }, [slug, card, initialSrc]);
+  }, [slug, cardFilename, initialSrc, initialBlob]);
 
   useEffect(() => {
+    if (!card) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowLeft") onSelectIndex((activeIndex - 1 + cards.length) % cards.length);
-      else if (e.key === "ArrowRight") onSelectIndex((activeIndex + 1) % cards.length);
+      else if (cards.length > 1 && e.key === "ArrowLeft") onSelectIndex((activeIndex - 1 + cards.length) % cards.length);
+      else if (cards.length > 1 && e.key === "ArrowRight") onSelectIndex((activeIndex + 1) % cards.length);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeIndex, cards.length, onClose, onSelectIndex]);
+  }, [card, activeIndex, cards.length, onClose, onSelectIndex]);
 
   if (!card) return null;
 
@@ -204,7 +235,11 @@ function CardLightbox({
     try {
       await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = null;
+        setCopied(false);
+      }, 1800);
     } catch {
       /* ignora */
     }
@@ -233,6 +268,7 @@ function CardLightbox({
                   size="sm"
                   variant="subtle"
                   icon={copied ? <Check size={12} /> : <Copy size={12} />}
+                  disabled={!blob}
                   onClick={() => void handleCopy()}
                 >
                   {copied ? "Copiado" : "Copiar"}
@@ -291,11 +327,23 @@ function CardLightbox({
 export function CardGallery({ slug, cards }: { slug: string; cards: PromovidaCard[] }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [initialSrc, setInitialSrc] = useState<string | null>(null);
+  const [initialBlob, setInitialBlob] = useState<Blob | null>(null);
 
   const handleClose = useCallback(() => {
     setLightboxIdx(null);
     setInitialSrc(null);
+    setInitialBlob(null);
   }, []);
+
+  useEffect(() => {
+    handleClose();
+  }, [slug, handleClose]);
+
+  useEffect(() => {
+    if (lightboxIdx !== null && lightboxIdx >= cards.length) {
+      handleClose();
+    }
+  }, [lightboxIdx, cards.length, handleClose]);
 
   if (cards.length === 0) {
     return (
@@ -316,20 +364,23 @@ export function CardGallery({ slug, cards }: { slug: string; cards: PromovidaCar
             card={card}
             onOpen={(state) => {
               setInitialSrc(state.src);
+              setInitialBlob(state.blob);
               setLightboxIdx(idx);
             }}
           />
         ))}
       </div>
-      {lightboxIdx !== null && (
+      {lightboxIdx !== null && lightboxIdx < cards.length && (
         <CardLightbox
           slug={slug}
           cards={cards}
           activeIndex={lightboxIdx}
           initialSrc={initialSrc}
+          initialBlob={initialBlob}
           onClose={handleClose}
           onSelectIndex={(idx) => {
             setInitialSrc(null);
+            setInitialBlob(null);
             setLightboxIdx(idx);
           }}
         />

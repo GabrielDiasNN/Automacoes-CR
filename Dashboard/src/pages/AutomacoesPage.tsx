@@ -173,10 +173,14 @@ export function AutomacoesPage() {
     if (!alvo) return;
     focusedCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightedId(alvo.id);
-    const limpar = setTimeout(() => setHighlightedId(null), 2400);
     setSearchParams({}, { replace: true }); // consome o parâmetro
-    return () => clearTimeout(limpar);
   }, [focusName, items, setSearchParams]);
+
+  useEffect(() => {
+    if (highlightedId === null) return;
+    const limpar = setTimeout(() => setHighlightedId(null), 2400);
+    return () => clearTimeout(limpar);
+  }, [highlightedId]);
 
   const dispatch = useCallback(
     (a: Automation) => {

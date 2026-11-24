@@ -137,7 +137,7 @@ def _cases() -> list[dict[str, Any]]:
     return [
         _saldo_case(
             "stock_saldo_quimico",
-            "01_beneficiamento_tingimento/bnf_monitoramento_atributos_produtos_quimicos.sql",
+            "Consultas Promovidas/quimicos-atributo-4/consulta.sql",
             "M.CDDEPOSITO = 20 AND M.IDGERAATRIESTO = 4",
         ),
         _saldo_case(

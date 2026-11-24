@@ -12,7 +12,10 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
   // Foco no campo ao aparecer (substitui `autoFocus`, que o jsx-a11y veta):
   // esta é a única tela antes da navegação, então o foco inicial é o esperado.
   useEffect(() => {
-    if (!hasKey) inputRef.current?.focus();
+    if (!hasKey) {
+      setInput("");
+      inputRef.current?.focus();
+    }
   }, [hasKey]);
 
   if (hasKey) return <>{children}</>;
@@ -24,6 +27,7 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
       setError("Chave não pode estar vazia.");
       return;
     }
+    setInput("");
     saveKey(key);
   };
 

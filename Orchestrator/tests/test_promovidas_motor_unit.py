@@ -363,3 +363,47 @@ def test_run_promocao_reconciliacao_parcial_e_exit_codes(
     )
     assert _executar_promocao(ctx, cfg, tmp_path, dry_run=False) == 26
     assert not (tmp_path / "card.png").exists()
+
+
+@pytest.mark.unitario
+def test_config_rejeita_consulta_rooted_e_card_pagina_por_tamanho(
+    tmp_path: Path,
+) -> None:
+    promo = tmp_path / "promocao.json"
+    promo.write_text(
+        json.dumps(
+            {
+                "slug": "teste-rooted",
+                "nome": "Teste Rooted",
+                "consulta": "/fora/consulta.sql",
+                "chave": ["ID"],
+                "painel": {"titulo": "T", "kpis": ["count"], "colunas": ["ID"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        carregar_config(promo)
+
+    # Paginacao por tamanho de legenda (sem truncar linhas quando excede 3500 chars)
+    cfg = ConfigPromocao(
+        slug="teste-pag-chars",
+        nome="Teste Pag Chars",
+        consulta="consulta.sql",
+        modo="sombra",
+        chave=("ID",),
+        destinos=("whatsapp",),
+        painel=ConfigPainel(titulo="Teste", kpis=("count",), colunas=("ID", "DESC")),
+        excecao=ConfigExcecao(
+            condicoes=(),
+            renotificar_apos_horas=4.0,
+            colunas_card=(),
+            titulo_alerta="Teste Pag",
+        ),
+    )
+    rows = [{"ID": str(i), "DESC": "X" * 450} for i in range(1, 12)]
+    _, _, manifest_path = gerar_artefatos_whatsapp(cfg, rows, tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert len(manifest) >= 2
+    assert all("consulte os logs" not in entry["caption"] for entry in manifest)
+    assert sum(len(entry["ob_ids"]) for entry in manifest) == 11

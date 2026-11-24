@@ -45,8 +45,10 @@ function expandCronField(field: string, min: number, max: number): number[] {
     let start = min;
     let end = max;
     if (rangePart !== "*") {
-      if (rangePart?.includes("-")) {
+      if (!rangePart) continue;
+      if (rangePart.includes("-")) {
         const [a, b] = rangePart.split("-");
+        if (!a || !b) continue;
         const na = Number(a);
         const nb = Number(b);
         if (!Number.isInteger(na) || !Number.isInteger(nb)) continue;
@@ -69,12 +71,15 @@ function expandCronField(field: string, min: number, max: number): number[] {
 
 function extractCronTimes(expr: string): { hour: number; minute: number }[] {
   const parts = expr.trim().split(/\s+/);
-  if (parts.length < 5) return [];
+  if (parts.length !== 5) return [];
   const minutes = expandCronField(parts[0]!, 0, 59);
   const hours = expandCronField(parts[1]!, 0, 23);
   if (minutes.length === 0 || hours.length === 0) return [];
   // Alta frequência (ex.: "* * * * *" ou "*/5"): amostra até 4 pontos por hora para manter a régua legível.
-  const sampledMinutes = minutes.length > 6 ? [minutes[0]!] : minutes;
+  const sampledMinutes =
+    minutes.length > 4
+      ? minutes.filter((_, idx) => idx % Math.ceil(minutes.length / 4) === 0).slice(0, 4)
+      : minutes;
   const result: { hour: number; minute: number }[] = [];
   for (const hour of hours) {
     for (const minute of sampledMinutes) {
@@ -102,7 +107,7 @@ function extractIntervalTimes(parsed: Record<string, unknown>): { hour: number; 
   const anchorMin = parseHhMmToMinutes(parsed.anchor_time) ?? startMin;
   if (startMin > endMin) return [];
 
-  const effectiveStep = step < 15 ? 60 : Math.floor(step);
+  const effectiveStep = step < 15 ? 15 : Math.floor(step);
   let cur = anchorMin;
   while (cur < startMin) cur += effectiveStep;
   while (cur - effectiveStep >= startMin) cur -= effectiveStep;
@@ -179,7 +184,7 @@ export function ScheduleTimeline24h({ automations, onSelectAutomation }: Schedul
       list.sort((a, b) => a.minute - b.minute || a.automation.name.localeCompare(b.automation.name, "pt-BR"));
     }
     const congested = byHour
-      .map((list, hour) => (list.length >= 2 ? hour : -1))
+      .map((list, hour) => (new Set(list.map((s) => s.automation.id)).size >= 2 ? hour : -1))
       .filter((hour) => hour >= 0);
     return {
       buckets: byHour,
@@ -203,8 +208,8 @@ export function ScheduleTimeline24h({ automations, onSelectAutomation }: Schedul
             {congestedHours.length > 0 && (
               <StatusTag tone="amber" dot>
                 {congestedHours.length === 1
-                  ? "1 hora congestionada (≥ 2 disparos)"
-                  : `${congestedHours.length} horas congestionadas (≥ 2 disparos)`}
+                  ? "1 hora congestionada (≥ 2 automações)"
+                  : `${congestedHours.length} horas congestionadas (≥ 2 automações)`}
               </StatusTag>
             )}
           </div>
@@ -213,11 +218,18 @@ export function ScheduleTimeline24h({ automations, onSelectAutomation }: Schedul
         {totalSlots === 0 ? (
           <p className={styles.empty}>Nenhum disparo com horário fixo ativo nas 24h.</p>
         ) : (
-          <div className={styles.scrollArea}>
+          <div
+            className={styles.scrollArea}
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- região com rolagem horizontal focável (WAI-ARIA APG); o aria-label dá nome à região
+            tabIndex={0}
+            role="region"
+            aria-label="Régua horária 24h com rolagem horizontal"
+          >
             <div className={styles.ruler} role="list" aria-label="Régua horária de 00h a 23h">
               {buckets.map((hourSlots, hour) => {
                 const hourText = `${String(hour).padStart(2, "0")}h`;
-                const isCongested = hourSlots.length >= 2;
+                const distinctAutos = new Set(hourSlots.map((s) => s.automation.id)).size;
+                const isCongested = distinctAutos >= 2;
                 const colClass = [
                   styles.hourCol,
                   hourSlots.length > 0 ? styles.hourActive : "",

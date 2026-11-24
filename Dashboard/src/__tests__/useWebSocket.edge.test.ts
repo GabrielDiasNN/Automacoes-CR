@@ -195,5 +195,10 @@ describe("useWebSocket (edge cases)", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(r401.current.status).toBe("unauthorized");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(resolvers).toHaveLength(2);
   });
 });

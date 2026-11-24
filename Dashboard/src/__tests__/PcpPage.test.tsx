@@ -105,6 +105,8 @@ function renderPage() {
 
 describe("PcpPage — consultas promovidas snapshot-first", () => {
   afterEach(() => {
+    localStorage.clear();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -154,24 +156,39 @@ describe("PcpPage — consultas promovidas snapshot-first", () => {
       ],
     });
 
-    if (!URL.createObjectURL) {
-      URL.createObjectURL = vi.fn(() => "blob:mock-card");
-      URL.revokeObjectURL = vi.fn();
+    const origCreateDesc = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
+    const origRevokeDesc = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => "blob:mock-card"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(),
+    });
+
+    try {
+      renderPage();
+
+      expect(await screen.findByText("OBs Paradas Fase")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Promovidas \(2\)/ }));
+      expect(screen.queryByText("OBs Paradas Fase")).not.toBeInTheDocument();
+      expect(screen.getByText("Risco Atraso Ramas")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /Todas \(3\)/ }));
+      fireEvent.click(screen.getByRole("tab", { name: /Cards Visuais PNG/ }));
+      expect(await screen.findByText("Felpagem")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("tab", { name: /Histórico/ }));
+      expect(await screen.findByText("22/11/2026 14:00:00")).toBeInTheDocument();
+    } finally {
+      if (origCreateDesc) Object.defineProperty(URL, "createObjectURL", origCreateDesc);
+      else delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+      if (origRevokeDesc) Object.defineProperty(URL, "revokeObjectURL", origRevokeDesc);
+      else delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
     }
-
-    renderPage();
-
-    expect(await screen.findByText("OBs Paradas Fase")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Promovidas \(2\)/ }));
-    expect(screen.queryByText("OBs Paradas Fase")).not.toBeInTheDocument();
-    expect(screen.getByText("Risco Atraso Ramas")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Todas \(3\)/ }));
-    fireEvent.click(screen.getByRole("tab", { name: /Cards Visuais PNG/ }));
-    expect(await screen.findByText("Felpagem")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: /Histórico/ }));
-    expect(await screen.findByText("22/11/2026 14:00:00")).toBeInTheDocument();
   });
 
   it("permite fixar favorito, recolher catálogo, filtrar por coluna e exportar Excel", async () => {
@@ -233,9 +250,26 @@ describe("PcpPage — consultas promovidas snapshot-first", () => {
       cards: [],
     });
 
-    renderPage();
-    expect(await screen.findByText("OB-1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Exportar Excel" })).toBeInTheDocument();
+    const origCreateDesc = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
+    const origRevokeDesc = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+    const createSpy = vi.fn(() => "blob:export-btn");
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, writable: true, value: createSpy });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, writable: true, value: vi.fn() });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    try {
+      renderPage();
+      expect(await screen.findByText("OB-1")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Exportar Excel" }));
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      clickSpy.mockRestore();
+      if (origCreateDesc) Object.defineProperty(URL, "createObjectURL", origCreateDesc);
+      else delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+      if (origRevokeDesc) Object.defineProperty(URL, "revokeObjectURL", origRevokeDesc);
+      else delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
+    }
 
     // Fixar favorito persiste em localStorage
     const pinBtn = screen.getByRole("button", { name: /Fixar Risco Atraso Ramas nos favoritos/i });
@@ -317,10 +351,12 @@ describe("PcpPage — consultas promovidas snapshot-first", () => {
     expect(screen.getByText("Seg–Sex às 08:00 e 14:00")).toBeInTheDocument();
   });
 
-  it("neutraliza formula injection ao exportar CSV e Excel", async () => {
+  it("neutraliza formula injection (incluindo whitespace e XSS) ao exportar CSV e Excel", async () => {
+    vi.useFakeTimers();
     const blobs: Blob[] = [];
     const origCreateDesc = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
     const origRevokeDesc = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+    const revokeSpy = vi.fn();
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       writable: true,
@@ -332,7 +368,7 @@ describe("PcpPage — consultas promovidas snapshot-first", () => {
     Object.defineProperty(URL, "revokeObjectURL", {
       configurable: true,
       writable: true,
-      value: vi.fn(),
+      value: revokeSpy,
     });
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
@@ -340,24 +376,41 @@ describe("PcpPage — consultas promovidas snapshot-first", () => {
       exportRowsAsCsv("teste", ["DESCRICAO", "VALOR"], [
         { DESCRICAO: "=CMD()", VALOR: -10.5 },
         { DESCRICAO: "+1+1", VALOR: 5 },
+        { DESCRICAO: "-1+1", VALOR: 0 },
+        { DESCRICAO: " =HYPERLINK()", VALOR: 1 },
+        { DESCRICAO: "\t=1", VALOR: 2 },
+        { DESCRICAO: "\n=1", VALOR: 3 },
+        { DESCRICAO: 'a;b"c', VALOR: 4 },
       ]);
       exportRowsAsExcel("teste", ["DESCRICAO", "VALOR"], [
         { DESCRICAO: "@SUM(A1)", VALOR: -2 },
+        { DESCRICAO: "\n=1+1 & <script>alert(1)</script>", VALOR: 1 },
       ]);
 
+      vi.runAllTimers();
+      expect(revokeSpy).toHaveBeenCalledTimes(2);
       expect(blobs).toHaveLength(2);
+
       const csvText = await blobs[0]!.text();
       expect(csvText).toContain("'=CMD()");
       expect(csvText).toContain("'+1+1");
+      expect(csvText).toContain("'-1+1");
+      expect(csvText).toContain("' =HYPERLINK()");
+      expect(csvText).toContain("'\t=1");
+      expect(csvText).toContain("'\n=1");
+      expect(csvText).toContain('"a;b""c"');
       expect(csvText).toContain(";-10.5");
 
       const xlsText = await blobs[1]!.text();
-      expect(xlsText).toContain("<td>'@SUM(A1)</td>");
+      expect(xlsText).toContain("'@SUM(A1)</td>");
+      expect(xlsText).toContain("'\n=1+1 &amp; &lt;script&gt;alert(1)&lt;/script&gt;</td>");
       expect(xlsText).toContain("<td>-2</td>");
     } finally {
       clickSpy.mockRestore();
       if (origCreateDesc) Object.defineProperty(URL, "createObjectURL", origCreateDesc);
+      else delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
       if (origRevokeDesc) Object.defineProperty(URL, "revokeObjectURL", origRevokeDesc);
+      else delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
     }
   });
 });

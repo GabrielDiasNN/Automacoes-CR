@@ -65,7 +65,8 @@ _AUTOMACOES_SPECS: tuple[_AutomacaoSnapshotSpec, ...] = (
         pasta="OBs Fluxo Sem Tingimento",
         arquivos=_ArquivosAutomacao(
             result_file="ofst_result.json",
-            cards_dirs=("cards", "images"),
+            cards_manifest="cards_manifest.json",
+            cards_dirs=(".",),
         ),
     ),
     _AutomacaoSnapshotSpec(
@@ -77,7 +78,8 @@ _AUTOMACOES_SPECS: tuple[_AutomacaoSnapshotSpec, ...] = (
         pasta="OBs Restricao Branco",
         arquivos=_ArquivosAutomacao(
             result_file="orb_result.json",
-            cards_dirs=("cards", "images"),
+            cards_manifest="cards_manifest.json",
+            cards_dirs=(".",),
         ),
     ),
     _AutomacaoSnapshotSpec(
@@ -164,7 +166,15 @@ def _ler_json_seguro(arquivo: Path) -> Any:
 
 
 def _ler_snapshot_latest(project_root: Path, slug: str) -> dict[str, Any] | None:
-    dados = _ler_json_seguro(_snapshots_dir(project_root) / "latest" / f"{slug}.json")
+    if not _SLUG_RE.match((slug or "").strip()):
+        return None
+    latest_dir = (_snapshots_dir(project_root) / "latest").resolve()
+    alvo = (latest_dir / f"{slug}.json").resolve()
+    try:
+        alvo.relative_to(latest_dir)
+    except ValueError:
+        return None
+    dados = _ler_json_seguro(alvo)
     return dados if isinstance(dados, dict) else None
 
 
@@ -198,10 +208,10 @@ def _kpis_seguros(valor: Any) -> dict[str, Any]:
     return {}
 
 
-def _validar_card_manifesto(
-    pasta: Path, spec: _AutomacaoSnapshotSpec, img_rel: str
+def _validar_card_em_dirs(
+    pasta: Path, allowed_dirs: tuple[str, ...], img_rel: str
 ) -> str | None:
-    """Valida que um caminho do manifesto aponta para um PNG seguro dentro de ``cards_dirs``."""
+    """Valida que um caminho do manifesto aponta para um PNG seguro em ``allowed_dirs``."""
     rel_norm = img_rel.strip().replace("\\", "/")
     fname = Path(rel_norm).name
     if not fname or not _SAFE_PNG_RE.match(fname):
@@ -214,39 +224,60 @@ def _validar_card_manifesto(
         return None
     if not alvo.is_file():
         return None
-    for rel_dir in spec.arquivos.cards_dirs:
+    for rel_dir in allowed_dirs:
         dir_resolved = (pasta_resolved / rel_dir).resolve()
         if alvo == dir_resolved / fname:
             return fname
     return None
 
 
+def _validar_card_manifesto(
+    pasta: Path, spec: _AutomacaoSnapshotSpec, img_rel: str
+) -> str | None:
+    """Valida que um caminho do manifesto aponta para um PNG seguro dentro de ``cards_dirs``."""
+    return _validar_card_em_dirs(pasta, spec.arquivos.cards_dirs, img_rel)
+
+
+def _coletar_cards_manifesto(
+    pasta: Path, manifest_file: str, allowed_dirs: tuple[str, ...]
+) -> list[dict[str, str]]:
+    """Le cards declarados em ``manifest_file`` validando cada PNG contra ``allowed_dirs``."""
+    raw = _ler_json_seguro(pasta / manifest_file)
+    if not isinstance(raw, list):
+        return []
+    cards: list[dict[str, str]] = []
+    seen_files: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        fname = _validar_card_em_dirs(
+            pasta, allowed_dirs, str(entry.get("image_path") or "")
+        )
+        if not fname or fname in seen_files:
+            continue
+        seen_files.add(fname)
+        cards.append(
+            {
+                "key": str(entry.get("phase_key") or fname),
+                "title": str(entry.get("phase_display") or fname),
+                "filename": fname,
+                "caption": str(entry.get("caption") or ""),
+            }
+        )
+    return cards
+
+
 def _coletar_cards_automacao(
     pasta: Path, spec: _AutomacaoSnapshotSpec
 ) -> list[dict[str, str]]:
-    """Lista cards PNG disponiveis de uma automacao (manifesto ou diretorio)."""
+    """Lista cards PNG disponiveis de uma automacao (manifesto exclusivo ou diretorio)."""
+    if spec.arquivos.cards_manifest:
+        return _coletar_cards_manifesto(
+            pasta, spec.arquivos.cards_manifest, spec.arquivos.cards_dirs
+        )
+
     cards: list[dict[str, str]] = []
     seen_files: set[str] = set()
-    if spec.arquivos.cards_manifest:
-        raw = _ler_json_seguro(pasta / spec.arquivos.cards_manifest)
-        if isinstance(raw, list):
-            for entry in raw:
-                if not isinstance(entry, dict):
-                    continue
-                fname = _validar_card_manifesto(
-                    pasta, spec, str(entry.get("image_path") or "")
-                )
-                if not fname or fname in seen_files:
-                    continue
-                seen_files.add(fname)
-                cards.append(
-                    {
-                        "key": str(entry.get("phase_key") or fname),
-                        "title": str(entry.get("phase_display") or fname),
-                        "filename": fname,
-                        "caption": str(entry.get("caption") or ""),
-                    }
-                )
     for rel_dir in spec.arquivos.cards_dirs:
         sub = pasta / rel_dir
         if not sub.is_dir():
@@ -385,7 +416,7 @@ def _obter_snapshot_automacao(
     auto_name = str(manifest_name) if manifest_name else spec.nome
     rows, kpis, generated_at, excecoes = _extrair_linhas_automacao(pasta, spec)
     cards = _coletar_cards_automacao(pasta, spec)
-    columns = list(rows[0].keys()) if rows else []
+    columns = list(dict.fromkeys(k for r in rows for k in r))
     return {
         "slug": spec.slug,
         "codigo": spec.codigo,
@@ -419,20 +450,34 @@ def _setor_por_owner(owner_area: str | None) -> str:
     return "Beneficiamento & PCP"
 
 
-def _montar_item_promovida(
-    project_root: Path, pasta: Path
-) -> dict[str, Any] | None:
+def _coletar_cards_promovida(pasta: Path) -> list[dict[str, str]]:
+    """Lista cards PNG declarados em ``cards_manifest.json`` na pasta da consulta."""
+    if not pasta.is_dir():
+        return []
+    return _coletar_cards_manifesto(pasta, "cards_manifest.json", (".",))
+
+
+def _montar_item_promovida(project_root: Path, pasta: Path) -> dict[str, Any] | None:
     cfg = _ler_json_seguro(pasta / "promocao.json")
     if not isinstance(cfg, dict):
         return None
     manifest_raw = _ler_json_seguro(pasta / "automation.manifest.json")
     manifest = manifest_raw if isinstance(manifest_raw, dict) else {}
-    slug = str(cfg.get("slug") or pasta.name)
+    slug = str(cfg.get("slug") or pasta.name).strip()
+    if not _SLUG_RE.match(slug):
+        return None
     snap = _ler_snapshot_latest(project_root, slug)
+    cards = _coletar_cards_promovida(pasta)
     painel_raw = cfg.get("painel")
     painel: dict[str, Any] = painel_raw if isinstance(painel_raw, dict) else {}
-    destinos = list(cfg["destinos"]) if isinstance(cfg.get("destinos"), list) else ["dashboard"]
-    generated_at = str(snap["generated_at"]) if snap and snap.get("generated_at") else None
+    destinos = (
+        list(cfg["destinos"])
+        if isinstance(cfg.get("destinos"), list)
+        else ["dashboard"]
+    )
+    generated_at = (
+        str(snap["generated_at"]) if snap and snap.get("generated_at") else None
+    )
     return {
         "slug": slug,
         "codigo": str(manifest.get("id") or slug.upper()),
@@ -448,7 +493,7 @@ def _montar_item_promovida(
         "age_minutes": _idade_minutos(generated_at),
         "total_rows": _int_seguro(snap.get("total_rows"), 0) if snap else 0,
         "excecoes_count": _int_seguro(snap.get("excecoes_count"), 0) if snap else 0,
-        "cards_count": 0,
+        "cards_count": len(cards),
         "kpis": _kpis_seguros(snap.get("kpis")) if snap else {},
     }
 
@@ -470,7 +515,11 @@ def listar_promocoes(
         return itens
 
     for pasta in sorted(base.iterdir(), key=lambda p: p.name.lower()):
-        if not pasta.is_dir() or pasta.name in {"snapshots"} or pasta.name.startswith("."):
+        if (
+            not pasta.is_dir()
+            or pasta.name in {"snapshots"}
+            or pasta.name.startswith(".")
+        ):
             continue
         item = _montar_item_promovida(project_root, pasta)
         if item is not None:
@@ -493,7 +542,11 @@ def obter_ultimo_snapshot(project_root: Path, slug: str) -> dict[str, Any]:
         str(snap["generated_at"]) if snap.get("generated_at") else None
     )
     snap.setdefault("origem", "promovida")
-    snap.setdefault("cards", [])
+    cards_locais = _coletar_cards_promovida(_promovidas_dir(project_root) / slug_ok)
+    if cards_locais:
+        snap["cards"] = cards_locais
+    else:
+        snap.setdefault("cards", [])
     return snap
 
 
@@ -505,18 +558,30 @@ def resolver_card_png(project_root: Path, slug: str, filename: str) -> Path:
         raise DomainRuleError(400, "Nome de arquivo PNG invalido.")
 
     spec = _AUTOMACOES_POR_SLUG.get(slug_ok)
-    if spec is None:
-        raise DomainRuleError(404, f"Cards indisponiveis para '{slug_ok}'.")
+    if spec is not None:
+        pasta = (project_root / spec.pasta).resolve()
+        for rel_dir in spec.arquivos.cards_dirs:
+            candidato = (pasta / rel_dir / fname).resolve()
+            try:
+                candidato.relative_to(pasta)
+            except ValueError as exc:
+                raise DomainRuleError(
+                    400, "Caminho de card fora do escopo permitido."
+                ) from exc
+            if candidato.is_file():
+                return candidato
+        raise DomainRuleError(404, f"Card '{fname}' nao encontrado para '{slug_ok}'.")
 
-    pasta = (project_root / spec.pasta).resolve()
-    for rel_dir in spec.arquivos.cards_dirs:
-        candidato = (pasta / rel_dir / fname).resolve()
-        try:
-            candidato.relative_to(pasta)
-        except ValueError as exc:
-            raise DomainRuleError(400, "Caminho de card fora do escopo permitido.") from exc
-        if candidato.is_file():
-            return candidato
+    pasta_promovida = (_promovidas_dir(project_root) / slug_ok).resolve()
+    if not pasta_promovida.is_dir():
+        raise DomainRuleError(404, f"Cards indisponiveis para '{slug_ok}'.")
+    candidato = (pasta_promovida / fname).resolve()
+    try:
+        candidato.relative_to(pasta_promovida)
+    except ValueError as exc:
+        raise DomainRuleError(400, "Caminho de card fora do escopo permitido.") from exc
+    if candidato.is_file():
+        return candidato
 
     raise DomainRuleError(404, f"Card '{fname}' nao encontrado para '{slug_ok}'.")
 
@@ -529,18 +594,30 @@ def obter_historico(
     db_path = _snapshots_dir(project_root) / "promovidas.db"
     if not db_path.is_file():
         return []
-    with contextlib.closing(sqlite3.connect(str(db_path), timeout=5.0)) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """
-            SELECT slug, generated_at, modo, total_rows, excecoes_count, kpis_json
-              FROM snapshots_historico
-             WHERE slug = ?
-             ORDER BY generated_at DESC
-             LIMIT ?
-            """,
-            (slug_ok, limit),
-        ).fetchall()
+    db_uri = f"{db_path.resolve().as_uri()}?mode=ro"
+    try:
+        with contextlib.closing(sqlite3.connect(db_uri, uri=True, timeout=5.0)) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT slug, generated_at, modo, total_rows, excecoes_count, kpis_json
+                  FROM snapshots_historico
+                 WHERE slug = ?
+                 ORDER BY generated_at DESC
+                 LIMIT ?
+                """,
+                (slug_ok, limit),
+            ).fetchall()
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            return []
+        raise DomainRuleError(
+            503, "Historico de snapshots temporariamente indisponivel."
+        ) from exc
+    except sqlite3.Error as exc:
+        raise DomainRuleError(
+            503, "Falha ao consultar historico de snapshots."
+        ) from exc
     return [
         {
             "slug": str(r["slug"]),

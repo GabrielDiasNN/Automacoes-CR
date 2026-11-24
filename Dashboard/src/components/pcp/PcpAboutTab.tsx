@@ -1,5 +1,5 @@
 import type { Automation, PromovidaResumo, PromovidaSnapshot } from "../../api/orchestrator";
-import { formatAge, formatNumber } from "../../lib/format";
+import { formatAge, formatDateTimeBr, formatNumber } from "../../lib/format";
 import { Card, DescriptionList, KeyValue, StatusTag } from "../ui";
 
 interface PcpAboutTabProps {
@@ -15,10 +15,11 @@ export function PcpAboutTab({ item, snapshot, linkedAutomation }: PcpAboutTabPro
   const setor = item.setor ?? snapshot.setor ?? "—";
   const modo = snapshot.modo || item.modo;
   const destinos = item.destinos.length > 0 ? item.destinos.join(", ") : "Nenhum destino configurado";
+  const formattedDate = formatDateTimeBr(snapshot.generated_at);
   const ageLabel =
-    snapshot.age_minutes !== null
-      ? `${snapshot.generated_at} (${formatAge(snapshot.age_minutes * 60)})`
-      : snapshot.generated_at;
+    snapshot.age_minutes !== null && snapshot.generated_at
+      ? `${formattedDate} (${formatAge(snapshot.age_minutes * 60)})`
+      : formattedDate;
 
   return (
     <Card label="Sobre / Regra de Negócio">

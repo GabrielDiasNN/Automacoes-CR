@@ -71,8 +71,9 @@ export function formatColumnHeader(col: string): string {
 function sanitizeSpreadsheetCell(val: unknown): string {
   if (val === null || val === undefined) return "";
   const s = String(val);
-  // Neutraliza Formula Injection (CSV/DDE) em textos iniciados por =, +, -, @, tab ou CR.
-  if (typeof val !== "number" && /^[=+\-@\t\r]/.test(s)) {
+  // Neutraliza Formula Injection (CSV/DDE/HTML) em textos iniciados por
+  // =, +, -, @ (inclusive após whitespace), tab, CR ou LF.
+  if (typeof val !== "number" && (/^[\t\r\n]/.test(s) || /^\s*[=+\-@]/.test(s))) {
     return `'${s}`;
   }
   return s;
@@ -109,7 +110,18 @@ export function exportRowsAsExcel(filename: string, columns: string[], rows: Rec
       .replace(/"/g, "&quot;");
   const ths = columns.map((c) => `<th>${escHtml(formatColumnHeader(c))}</th>`).join("");
   const trs = rows
-    .map((r) => `<tr>${columns.map((c) => `<td>${escHtml(r[c])}</td>`).join("")}</tr>`)
+    .map(
+      (r) =>
+        `<tr>${columns
+          .map((c) => {
+            const raw = r[c];
+            const isText = typeof raw !== "number";
+            return isText
+              ? `<td style="mso-number-format:'\\@'">${escHtml(raw)}</td>`
+              : `<td>${escHtml(raw)}</td>`;
+          })
+          .join("")}</tr>`,
+    )
     .join("");
   const html = `\uFEFF<html><head><meta charset="utf-8" /></head><body><table border="1"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></body></html>`;
   const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8;" });

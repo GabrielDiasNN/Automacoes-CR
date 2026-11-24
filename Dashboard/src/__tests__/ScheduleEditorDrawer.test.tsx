@@ -97,18 +97,29 @@ describe("ScheduleEditorDrawer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Salvar alterações/ }));
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
+    expect(updateSpy).toHaveBeenCalledWith(4, {
+      schedule: JSON.stringify({
+        schedule_version: 2,
+        schedule_type: "daily",
+        times: [
+          { h: 5, m: 30 },
+          { h: 14, m: 0 },
+        ],
+        timezone: "America/Sao_Paulo",
+      }),
+    });
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("preserva e edita agenda cron sem rebaixar para manual", async () => {
+  it("preserva e edita agenda cron enviando apenas schedule no PATCH", async () => {
     const cronAuto: Automation = {
       ...BASE_AUTO,
       schedule_type: "cron",
       schedule: JSON.stringify({
         schedule_version: 2,
         schedule_type: "cron",
-        cron_expression: ["0 5-19/2 * * 1-5", "0 5-13/2 * * 6"],
+        cron_expression: ["0 5-19/2 * * 0-4", "0 5-13/2 * * 5"],
         timezone: "America/Sao_Paulo",
       }),
     };
@@ -122,23 +133,32 @@ describe("ScheduleEditorDrawer", () => {
       </ToastProvider>,
     );
 
-    const cronInput = screen.getByLabelText<HTMLInputElement>("Expressões cron");
-    expect(cronInput.value).toBe("0 5-19/2 * * 1-5; 0 5-13/2 * * 6");
+    // SLA/Timeout/Retries ficam somente leitura (governados pelo manifesto)
+    expect(screen.getByLabelText("SLA em minutos")).toBeDisabled();
+    expect(screen.getByLabelText("Tempo máximo de execução")).toBeDisabled();
+    expect(screen.getByLabelText("Máximo de retentativas")).toBeDisabled();
 
+    const cronInput = screen.getByLabelText<HTMLInputElement>("Expressões cron");
+    expect(cronInput.value).toBe("0 5-19/2 * * 0-4; 0 5-13/2 * * 5");
+
+    fireEvent.change(cronInput, { target: { value: "0 7-17 * * mon-fri; 0 8 * * sat" } });
     fireEvent.click(screen.getByRole("button", { name: /Salvar alterações/ }));
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
     const payload = updateSpy.mock.calls[0]![1];
+    expect("sla_minutes" in payload).toBe(false);
+    expect("max_runtime_minutes" in payload).toBe(false);
+    expect("max_retries" in payload).toBe(false);
     expect(payload.schedule).toBe(
       JSON.stringify({
         schedule_version: 2,
         schedule_type: "cron",
-        cron_expression: ["0 5-19/2 * * 1-5", "0 5-13/2 * * 6"],
+        cron_expression: ["0 7-17 * * mon-fri", "0 8 * * sat"],
         timezone: "America/Sao_Paulo",
       }),
     );
   });
 
-  it("preserva agenda avançada (monthly) sem sobrescrever schedule ao salvar SLA", async () => {
+  it("preserva agenda avançada (monthly) bloqueando overwrite e mantendo opção selecionável", async () => {
     const monthlyAuto: Automation = {
       ...BASE_AUTO,
       schedule_type: "monthly",
@@ -159,10 +179,62 @@ describe("ScheduleEditorDrawer", () => {
       </ToastProvider>,
     );
 
-    expect(screen.getByText(/será preservada inalterada/)).toBeInTheDocument();
+    expect(screen.getByText(/está preservada inalterada/)).toBeInTheDocument();
+    const saveBtn = screen.getByRole("button", { name: /Salvar alterações/ });
+    expect(saveBtn).toBeDisabled();
+
+    // Trocar para manual e voltar para preserved continua disponível
+    const kindSelect = screen.getByLabelText<HTMLSelectElement>("Tipo de agendamento");
+    fireEvent.change(kindSelect, { target: { value: "manual" } });
+    expect(saveBtn).toBeEnabled();
+    fireEvent.change(kindSelect, { target: { value: "preserved" } });
+    expect(kindSelect.value).toBe("preserved");
+    expect(saveBtn).toBeDisabled();
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it("preserva agenda interval 24x7 com anchor_time e rejeita horário inválido em daily", async () => {
+    const intervalAuto: Automation = {
+      ...BASE_AUTO,
+      schedule_type: "interval",
+      schedule: JSON.stringify({
+        schedule_version: 2,
+        schedule_type: "interval",
+        interval_minutes: 30,
+        start_time: null,
+        end_time: null,
+        days_of_week: null,
+        anchor_time: "06:15",
+      }),
+    };
+    const updateSpy = vi.spyOn(orchestratorApi, "updateAutomation").mockResolvedValue(intervalAuto);
+
+    render(
+      <ToastProvider>
+        <ScheduleEditorDrawer automation={intervalAuto} onClose={vi.fn()} onSaved={vi.fn()} />
+      </ToastProvider>,
+    );
+
+    expect(screen.getByLabelText<HTMLInputElement>("Horário inicial da janela").value).toBe("");
+    expect(screen.getByLabelText<HTMLInputElement>("Horário final da janela").value).toBe("");
+
     fireEvent.click(screen.getByRole("button", { name: /Salvar alterações/ }));
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1));
-    const payload = updateSpy.mock.calls[0]![1];
-    expect("schedule" in payload).toBe(false);
+    expect(updateSpy.mock.calls[0]![1].schedule).toBe(
+      JSON.stringify({
+        schedule_version: 2,
+        schedule_type: "interval",
+        interval_minutes: 30,
+        anchor_time: "06:15",
+        timezone: "America/Sao_Paulo",
+      }),
+    );
+
+    // Horário inválido não é descartado silenciosamente
+    fireEvent.change(screen.getByLabelText("Tipo de agendamento"), { target: { value: "daily" } });
+    fireEvent.change(screen.getByLabelText("Horários de execução"), { target: { value: "07:00, 25:99" } });
+    fireEvent.click(screen.getByRole("button", { name: /Salvar alterações/ }));
+    expect(await screen.findByText(/Horário\(s\) inválido\(s\): 25:99/)).toBeInTheDocument();
+    expect(updateSpy).toHaveBeenCalledTimes(1);
   });
 });

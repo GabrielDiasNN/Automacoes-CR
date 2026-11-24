@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Bell, ClipboardList, ServerCrash, X } from "lucide-react";
+import { ApiError } from "../api/client";
 import {
   orchestratorApi,
   type ExecutionStatus,
   type ExecutionSummary,
   type PromovidaResumo,
 } from "../api/orchestrator";
+import { executionLabel, healthLabel } from "../lib/status";
 import { IconButton } from "./ui";
 import styles from "./AlertsBellPopover.module.css";
 
@@ -39,13 +41,24 @@ function isFailureAlert(exec: ExecutionSummary): boolean {
 export function AlertsBellPopover() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+  const [lastError, setLastError] = useState(false);
   const [snapshot, setSnapshot] = useState<AlertsSnapshot>(EMPTY_SNAPSHOT);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestSeqRef = useRef(0);
+  const blockedUntilRef = useRef(0);
   const navigate = useNavigate();
 
+  const closePopover = useCallback((restoreFocus = false) => {
+    setOpen(false);
+    if (restoreFocus) {
+      wrapperRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    }
+  }, []);
+
   const fetchAlerts = useCallback(async () => {
+    if (Date.now() < blockedUntilRef.current) return;
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -58,6 +71,21 @@ export function AlertsBellPopover() {
         orchestratorApi.getPromovidas(ac.signal),
       ]);
       if (ac.signal.aborted || seq !== requestSeqRef.current) return;
+
+      const anySuccess =
+        (overviewRes.status === "fulfilled" && Boolean(overviewRes.value)) ||
+        (promovidasRes.status === "fulfilled" && Array.isArray(promovidasRes.value?.items));
+      const anyError = overviewRes.status === "rejected" || promovidasRes.status === "rejected";
+
+      for (const res of [overviewRes, promovidasRes]) {
+        if (res.status === "rejected" && res.reason instanceof ApiError && res.reason.status === 429) {
+          const retryS = res.reason.retryAfter ?? 30;
+          blockedUntilRef.current = Math.max(blockedUntilRef.current, Date.now() + retryS * 1000);
+        }
+      }
+
+      if (anySuccess) setHasFetched(true);
+      setLastError(anyError);
 
       setSnapshot((prev) => {
         let failures = prev.failures;
@@ -73,7 +101,7 @@ export function AlertsBellPopover() {
           if (healthStatus && healthStatus !== "healthy" && healthStatus !== "ok") {
             nextSystemAlerts.push({
               id: `health-${healthStatus}`,
-              title: `Saúde do sistema: ${healthStatus}`,
+              title: `Saúde do sistema: ${healthLabel(healthStatus)}`,
               detail: "Verificar diagnóstico e serviços em Saúde & Manutenção",
               severity: healthStatus === "unhealthy" ? "danger" : "warn",
             });
@@ -83,7 +111,7 @@ export function AlertsBellPopover() {
           if (baseline && baseline.status && baseline.status !== "healthy") {
             nextSystemAlerts.push({
               id: `baseline-${baseline.status}`,
-              title: `Baseline operacional: ${baseline.status}`,
+              title: `Baseline operacional: ${healthLabel(baseline.status)}`,
               detail:
                 baseline.recommended_action ??
                 `${baseline.incident_count} incidente(s), ${baseline.attention_count} ponto(s) de atenção`,
@@ -127,14 +155,13 @@ export function AlertsBellPopover() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        setOpen(false);
-        wrapperRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+        closePopover(true);
       }
     };
 
     const onMouseDown = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
+        closePopover(false);
       }
     };
 
@@ -144,7 +171,7 @@ export function AlertsBellPopover() {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("mousedown", onMouseDown);
     };
-  }, [open]);
+  }, [open, closePopover]);
 
   const totalAlerts = useMemo(
     () => snapshot.failures.length + snapshot.pcpExceptions.length + snapshot.systemAlerts.length,
@@ -152,6 +179,10 @@ export function AlertsBellPopover() {
   );
 
   const badgeLabel = totalAlerts > 99 ? "99+" : String(totalAlerts);
+  const triggerLabel =
+    totalAlerts > 0
+      ? `Central de alertas (${totalAlerts} ${totalAlerts === 1 ? "ativo" : "ativos"})`
+      : "Central de alertas";
 
   const handleToggle = () => {
     const next = !open;
@@ -160,7 +191,7 @@ export function AlertsBellPopover() {
   };
 
   const handleNavigate = (to: string) => {
-    setOpen(false);
+    closePopover(false);
     void navigate(to);
   };
 
@@ -169,10 +200,10 @@ export function AlertsBellPopover() {
       <IconButton
         className={styles.trigger}
         onClick={handleToggle}
-        aria-label="Central de alertas"
+        aria-label={triggerLabel}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title={totalAlerts > 0 ? `Central de alertas (${totalAlerts} ativo${totalAlerts === 1 ? "" : "s"})` : "Central de alertas"}
+        title={triggerLabel}
         active={open}
       >
         <Bell size={16} aria-hidden="true" />
@@ -199,7 +230,7 @@ export function AlertsBellPopover() {
             <button
               type="button"
               className={styles.closeBtn}
-              onClick={() => setOpen(false)}
+              onClick={() => closePopover(true)}
               aria-label="Fechar central de alertas"
             >
               <X size={14} aria-hidden="true" />
@@ -207,9 +238,18 @@ export function AlertsBellPopover() {
           </div>
 
           <div className={styles.body}>
+            {lastError && hasFetched && (
+              <div className={styles.staleNotice} role="status">
+                Falha na última atualização — exibindo último estado conhecido.
+              </div>
+            )}
             {totalAlerts === 0 ? (
               <div className={styles.empty}>
-                {loading ? "Verificando alertas..." : "Nenhum alerta ativo no momento."}
+                {loading
+                  ? "Verificando alertas..."
+                  : lastError && !hasFetched
+                    ? "Não foi possível verificar alertas no momento."
+                    : "Nenhum alerta ativo no momento."}
               </div>
             ) : (
               <>
@@ -262,7 +302,7 @@ export function AlertsBellPopover() {
                                 {exec.automation_name ?? `Automação #${exec.automation_id}`}
                               </span>
                               <span className={styles.itemMeta}>
-                                {exec.status}
+                                {executionLabel(exec.status)}
                                 {exec.operator_reason_summary
                                   ? ` · ${exec.operator_reason_summary}`
                                   : exec.failure_reason

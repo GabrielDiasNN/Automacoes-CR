@@ -101,7 +101,7 @@
 
 .hourCount {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label);
   font-variant-numeric: tabular-nums;
   padding: 1px 4px;
   border-radius: 3px;
@@ -110,7 +110,7 @@
 }
 
 .hourCongested .hourCount {
-  background: var(--amber-tint);
+  background: var(--surface);
   border: 1px solid var(--amber-glow);
   color: var(--amber);
   font-weight: var(--fw-semibold);

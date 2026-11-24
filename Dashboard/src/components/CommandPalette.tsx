@@ -36,13 +36,17 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   const [selected, setSelected] = useState(0);
   const listboxId = useId();
   const debouncedQuery = useDebouncedValue(query, 250);
-  const buscaAtiva = open && debouncedQuery.trim().length >= 2;
+  const buscaAtiva = open && query.trim().length >= 2 && debouncedQuery.trim().length >= 2;
 
   useFocusTrap(boxRef, open, onClose);
   useOverlayDismiss(overlayRef, open, onClose);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQuery("");
+      setSelected(0);
+      return;
+    }
     setQuery("");
     setSelected(0);
     const id = requestAnimationFrame(() => inputRef.current?.focus());
@@ -56,31 +60,34 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
   // Erro descartado deliberadamente (`?? []`): a paleta sem resultados de
   // automação ainda funciona para navegação por rota — não é um ErrorState
   // que caiba num popover de busca.
-  const { data: automationResults } = useAsyncResource(buscaAtiva ? fetchAutomations : null, [debouncedQuery, open]);
+  const { data: automationResults } = useAsyncResource(buscaAtiva ? fetchAutomations : null, [debouncedQuery, buscaAtiva]);
   const automations = useMemo(() => automationResults ?? [], [automationResults]);
 
   const fetchPromovidas = useCallback(
     (signal?: AbortSignal) => orchestratorApi.getPromovidas(signal).then((r) => r.items).catch(() => []),
     [],
   );
-  const { data: promovidasResults } = useAsyncResource(buscaAtiva ? fetchPromovidas : null, [buscaAtiva, open]);
+  const { data: promovidasResults } = useAsyncResource(buscaAtiva ? fetchPromovidas : null, [buscaAtiva]);
 
   const entries: PaletteEntry[] = useMemo(() => {
     const q = query.trim().toLowerCase();
     const navEntries: PaletteEntry[] = navItems
       .filter((n) => !q || n.label.toLowerCase().includes(q))
       .map((n) => ({ kind: "nav" as const, key: `nav-${n.to}`, label: n.label, icon: n.icon, to: n.to }));
-    const autoEntries: PaletteEntry[] = automations.map((a) => ({
-      kind: "automation" as const,
-      key: `auto-${a.id}`,
-      label: a.name,
-      automation: a,
-    }));
+    const autoEntries: PaletteEntry[] = q.length >= 2
+      ? automations.map((a) => ({
+          kind: "automation" as const,
+          key: `auto-${a.id}`,
+          label: a.name,
+          automation: a,
+        }))
+      : [];
     const pcpEntries: PaletteEntry[] = q.length >= 2
       ? (promovidasResults ?? [])
           .filter(
             (p) =>
               p.nome.toLowerCase().includes(q) ||
+              (p.titulo ?? "").toLowerCase().includes(q) ||
               (p.codigo ?? "").toLowerCase().includes(q) ||
               (p.setor ?? "").toLowerCase().includes(q),
           )
@@ -97,7 +104,7 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
 
   useEffect(() => {
     setSelected(0);
-  }, [entries.length]);
+  }, [query, entries.length]);
 
   if (!open) return null;
 
@@ -171,6 +178,7 @@ export function CommandPalette({ open, onClose, navItems }: CommandPaletteProps)
                 <button
                   id={`${listboxId}-${entry.key}`}
                   type="button"
+                  tabIndex={-1}
                   className={`${styles.item} ${i === selected ? styles.itemActive : ""}`}
                   onMouseEnter={() => setSelected(i)}
                   onClick={() => activate(entry)}

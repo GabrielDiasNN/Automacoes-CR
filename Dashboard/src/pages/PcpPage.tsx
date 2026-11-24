@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
+  ArrowDown,
+  ArrowUp,
   ArrowUpDown,
   ClipboardList,
   Download,
@@ -90,15 +92,8 @@ export function PcpPage() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(() => slugParam);
 
   useEffect(() => {
-    if (slugParam) {
-      setSelectedSlug(slugParam);
-      setTablePage(1);
-      setSearchTerm("");
-      setColFilterKey("");
-      setColFilterVal("");
-      setSortCol(null);
-      setDetailTab("dados");
-    }
+    setSelectedSlug(slugParam);
+    setDetailTab("dados");
   }, [slugParam]);
   const [originFilter, setOriginFilter] = useState<OriginFilter>("all");
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -166,6 +161,15 @@ export function PcpPage() {
   const activeSlug = activeItem?.slug ?? null;
   const shouldFetchSnapshot = Boolean(activeSlug && activeItem?.has_snapshot);
 
+  useEffect(() => {
+    setTablePage(1);
+    setSearchTerm("");
+    setColFilterKey("");
+    setColFilterVal("");
+    setSortCol(null);
+    setSortDir("asc");
+  }, [activeSlug]);
+
   const linkedAutomation = useMemo(() => {
     if (!activeItem) return null;
     const autos = autosRes.data ?? [];
@@ -202,9 +206,11 @@ export function PcpPage() {
 
   const filteredRows = useMemo(() => {
     const rows = activeSnap?.rows ?? [];
+    const activeColumns = activeSnap?.columns ?? [];
+    const validFilterKey = colFilterKey && activeColumns.includes(colFilterKey) ? colFilterKey : "";
     const term = searchTerm.trim().toLowerCase();
     const matched = rows.filter((row) => {
-      if (colFilterKey && colFilterVal && String(row[colFilterKey] ?? "") !== colFilterVal) return false;
+      if (validFilterKey && colFilterVal && String(row[validFilterKey] ?? "") !== colFilterVal) return false;
       if (!term) return true;
       return Object.values(row).some((val) => String(val ?? "").toLowerCase().includes(term));
     });
@@ -237,37 +243,45 @@ export function PcpPage() {
 
   const columns = useMemo<Column<Record<string, unknown>>[]>(() => {
     const cols = activeSnap?.columns ?? [];
-    return cols.map((col) => ({
-      key: col,
-      header: (
-        <button
-          type="button"
-          className={styles.sortBtn}
-          onClick={() => {
-            if (sortCol === col) {
-              setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-            } else {
-              setSortCol(col);
-              setSortDir("asc");
-            }
-          }}
-        >
-          <span>{formatColumnHeader(col)}</span>
-          <ArrowUpDown size={11} aria-hidden="true" />
-        </button>
-      ),
-      render: (row) => formatCellValue(row[col]),
-    }));
-  }, [activeSnap, sortCol]);
+    return cols.map((col) => {
+      const isSorted = sortCol === col;
+      const dirLabel = isSorted ? (sortDir === "asc" ? "crescente" : "decrescente") : "sem ordenação";
+      return {
+        key: col,
+        header: (
+          <button
+            type="button"
+            className={styles.sortBtn}
+            aria-label={`Ordenar por ${formatColumnHeader(col)} (${dirLabel})`}
+            onClick={() => {
+              if (sortCol === col) {
+                setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+              } else {
+                setSortCol(col);
+                setSortDir("asc");
+              }
+            }}
+          >
+            <span>{formatColumnHeader(col)}</span>
+            {isSorted ? (
+              sortDir === "asc" ? (
+                <ArrowUp size={11} aria-hidden="true" />
+              ) : (
+                <ArrowDown size={11} aria-hidden="true" />
+              )
+            ) : (
+              <ArrowUpDown size={11} aria-hidden="true" />
+            )}
+          </button>
+        ),
+        render: (row) => formatCellValue(row[col]),
+      };
+    });
+  }, [activeSnap, sortCol, sortDir]);
 
   const handleSelect = (slug: string) => {
     setSelectedSlug(slug);
     setSearchParams({ slug }, { replace: true });
-    setTablePage(1);
-    setSearchTerm("");
-    setColFilterKey("");
-    setColFilterVal("");
-    setSortCol(null);
     setDetailTab("dados");
   };
 
@@ -317,6 +331,16 @@ export function PcpPage() {
 
       {listRes.error && !listRes.data && <ErrorState message={listRes.error} />}
       {listRes.loading && !listRes.data && <Loading label="Carregando central de consultas" />}
+
+      {!listRes.loading && !listRes.error && items.length === 0 && (
+        <Card label="Catálogo ativo">
+          <EmptyState
+            icon={<ClipboardList size={28} />}
+            title="Nenhuma consulta ou automação cadastrada"
+            hint="Cadastre consultas promovidas em Consultas Promovidas/ para exibi-las aqui."
+          />
+        </Card>
+      )}
 
       {items.length > 0 && (
         <div className={`${styles.layout} ${catalogCollapsed ? styles.layoutCollapsed : ""}`}>

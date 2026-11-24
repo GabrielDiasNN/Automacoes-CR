@@ -177,7 +177,7 @@ describe("AlertsBellPopover — Central de Alertas na Topbar", () => {
 
     // Reabre e navega para /sistema
     fireEvent.click(trigger);
-    fireEvent.click(await screen.findByRole("button", { name: /Saúde do sistema: degraded/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Saúde do sistema: degradado/i }));
     expect(screen.queryByRole("dialog", { name: "Central de alertas" })).not.toBeInTheDocument();
     expect(screen.getByTestId("current-location")).toHaveTextContent("/sistema");
   });
@@ -209,7 +209,7 @@ describe("AlertsBellPopover — Central de Alertas na Topbar", () => {
     expect(screen.queryByRole("dialog", { name: "Central de alertas" })).not.toBeInTheDocument();
   });
 
-  it("preserva alertas ativos já conhecidos em falha transitória parcial ou total da API", async () => {
+  it("preserva alertas ativos já conhecidos em falha transitória total ou parcial da API", async () => {
     const overviewSpy = mockOverview({
       recent: [makeExec({ id: "exec-err", status: "ERROR", automation_name: "ETL Persistente" })],
     });
@@ -235,15 +235,39 @@ describe("AlertsBellPopover — Central de Alertas na Topbar", () => {
     renderWithRouter();
     expect(await screen.findByTestId("alerts-bell-badge")).toHaveTextContent("2");
 
-    // Simula falha transitória total ao reabrir o popover
-    overviewSpy.mockRejectedValueOnce(new Error("503 Service Unavailable"));
-    promovidasSpy.mockRejectedValueOnce(new Error("timeout"));
+    // Falha transitória total controlada com promises pendentes até drenar Promise.allSettled
+    let rejectOverview!: (err: Error) => void;
+    let rejectPromovidas!: (err: Error) => void;
+    overviewSpy.mockImplementationOnce(
+      () => new Promise((_, reject) => { rejectOverview = reject; }),
+    );
+    promovidasSpy.mockImplementationOnce(
+      () => new Promise((_, reject) => { rejectPromovidas = reject; }),
+    );
 
-    const trigger = screen.getByRole("button", { name: "Central de alertas" });
+    const trigger = screen.getByRole("button", { name: /Central de alertas/i });
     fireEvent.click(trigger);
 
-    expect(await screen.findByRole("button", { name: /ETL Persistente/i })).toBeInTheDocument();
+    rejectOverview(new Error("503 Service Unavailable"));
+    rejectPromovidas(new Error("timeout"));
+
+    expect(
+      await screen.findByText("Falha na última atualização — exibindo último estado conhecido."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ETL Persistente/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /CP-99 · PCP Persistente/i })).toBeInTheDocument();
     expect(screen.getByTestId("alerts-bell-badge")).toHaveTextContent("2");
+
+    // Falha parcial: overview falha mas promovidas atualiza para 0 exceções
+    overviewSpy.mockRejectedValueOnce(new Error("503 Service Unavailable"));
+    promovidasSpy.mockResolvedValueOnce({ items: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Fechar central de alertas" }));
+    fireEvent.click(screen.getByRole("button", { name: /Central de alertas/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("alerts-bell-badge")).toHaveTextContent("1");
+    });
+    expect(screen.getByRole("button", { name: /ETL Persistente/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /CP-99 · PCP Persistente/i })).not.toBeInTheDocument();
   });
 });

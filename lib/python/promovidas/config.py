@@ -108,21 +108,25 @@ def _parse_excecao(
         return None
     if not isinstance(raw, dict):
         raise ValueError(f"Campo 'excecao' deve ser um objeto em {origem}.")
-    colunas_raw = raw.get("colunas_card") or []
-    if not isinstance(colunas_raw, list) or not all(
-        isinstance(c, str) and c.strip() for c in colunas_raw
-    ):
-        raise ValueError(f"'excecao.colunas_card' invalido em {origem}.")
-    horas = float(raw.get("renotificar_apos_horas", 24.0))
+    colunas = _parse_lista_strings(
+        raw.get("colunas_card"), "excecao.colunas_card", origem, padrao=[]
+    )
+    horas_raw = raw.get("renotificar_apos_horas", 24.0)
+    if isinstance(horas_raw, bool) or horas_raw is None:
+        raise ValueError(
+            f"'renotificar_apos_horas' invalido em {origem}: esperado numero >= 0."
+        )
+    try:
+        horas = float(horas_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"'renotificar_apos_horas' invalido em {origem}.") from exc
     if not math.isfinite(horas) or horas < 0:
         raise ValueError(
             f"'renotificar_apos_horas' invalido (negativo ou nao finito) em {origem}."
         )
-    colunas_unidade_raw = raw.get("colunas_unidade") or []
-    if not isinstance(colunas_unidade_raw, list) or not all(
-        isinstance(c, str) and c.strip() for c in colunas_unidade_raw
-    ):
-        raise ValueError(f"'excecao.colunas_unidade' invalido em {origem}.")
+    colunas_unidade = _parse_lista_strings(
+        raw.get("colunas_unidade"), "excecao.colunas_unidade", origem, padrao=[]
+    )
     cor_header_raw = raw.get("cor_header")
     cor_header: str | None = None
     if cor_header_raw is not None:
@@ -136,14 +140,17 @@ def _parse_excecao(
     return ConfigExcecao(
         condicoes=_parse_condicoes(raw.get("condicoes"), origem),
         renotificar_apos_horas=horas,
-        colunas_card=tuple(c.strip() for c in colunas_raw),
-        titulo_alerta=str(raw.get("titulo_alerta") or titulo_padrao).strip(),
-        destino_whatsapp_env=str(
-            bruto.get("destino_whatsapp_env") or "AUTOMACAO_ALERT_WHATSAPP"
-        ).strip(),
-        client_id_whatsapp=str(bruto.get("client_id_whatsapp") or "hub-global").strip(),
-        coluna_unidade=str(raw.get("coluna_unidade") or "UM").strip(),
-        colunas_unidade=tuple(c.strip() for c in colunas_unidade_raw),
+        colunas_card=colunas,
+        titulo_alerta=str(raw.get("titulo_alerta") or "").strip() or titulo_padrao,
+        destino_whatsapp_env=(
+            str(bruto.get("destino_whatsapp_env") or "").strip()
+            or "AUTOMACAO_ALERT_WHATSAPP"
+        ),
+        client_id_whatsapp=(
+            str(bruto.get("client_id_whatsapp") or "").strip() or "hub-global"
+        ),
+        coluna_unidade=str(raw.get("coluna_unidade") or "").strip() or "UM",
+        colunas_unidade=colunas_unidade,
         cor_header=cor_header,
     )
 
@@ -187,10 +194,21 @@ def carregar_config(caminho: Path) -> ConfigPromocao:
     nome = _texto_obrigatorio(bruto, "nome", caminho)
     consulta = _texto_obrigatorio(bruto, "consulta", caminho)
     consulta_path = Path(consulta)
-    if consulta_path.is_absolute() or ".." in consulta_path.parts:
+    if (
+        consulta_path.is_absolute()
+        or bool(consulta_path.drive)
+        or bool(consulta_path.root)
+        or ".." in consulta_path.parts
+    ):
         raise ValueError(
             f"'consulta' deve ser caminho relativo dentro da pasta em {caminho}."
         )
+    try:
+        (caminho.parent / consulta_path).resolve().relative_to(caminho.parent.resolve())
+    except ValueError as exc:
+        raise ValueError(
+            f"'consulta' deve permanecer contido na pasta em {caminho}."
+        ) from exc
 
     modo = str(bruto.get("modo") or "sombra").strip().lower()
     if modo not in _MODOS_VALIDOS:
@@ -201,7 +219,9 @@ def carregar_config(caminho: Path) -> ConfigPromocao:
         raise ValueError(f"'chave' deve listar ao menos uma coluna em {caminho}.")
     chave = tuple(str(c).strip() for c in chave_raw if str(c).strip())
     if not chave:
-        raise ValueError(f"'chave' deve conter ao menos uma coluna valida em {caminho}.")
+        raise ValueError(
+            f"'chave' deve conter ao menos uma coluna valida em {caminho}."
+        )
 
     destinos_raw = bruto.get("destinos")
     if destinos_raw is None:

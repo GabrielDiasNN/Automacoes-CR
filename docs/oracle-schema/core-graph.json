@@ -66,6 +66,15 @@
       "OB_FASES",
       "OPERADOR"
     ],
+    "Consultas Promovidas/quimicos-atributo-4/consulta.sql": [
+      "GERAMOVIESTOCOMP",
+      "GERAMOVIMENTOESTOQUE",
+      "GERAPARAMSISTFILIAL",
+      "ITENS_ESTOQUE",
+      "LOTE_ITENS_NOTA_ENTR",
+      "MOVTO_RECEITA",
+      "UNIDADE_MEDIDA"
+    ],
     "Consultas Promovidas/quimicos-ruptura-compra/consulta.sql": [
       "AR_ESTOQUE_QUIMICO",
       "ENTREGAS_PEDIDO_COMP",
@@ -465,11 +474,6 @@
       "PEDPRODUCAOOB",
       "UNIDADE_PROGRAMACAO",
       "UP_ORDEM_MVTO"
-    ],
-    "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_monitoramento_atributos_produtos_quimicos.sql": [
-      "GERAMOVIMENTOESTOQUE",
-      "GERAPARAMSISTFILIAL",
-      "ITENS_ESTOQUE"
     ],
     "docs/oracle-schema/consultas/01_beneficiamento_tingimento/bnf_monitoramento_maquinas_tingimento.sql": [
       "MAQUINA",

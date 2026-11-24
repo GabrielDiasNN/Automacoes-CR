@@ -23,6 +23,8 @@
       "REDUZIDO",
       "DESCRICAO",
       "QUANTIDADE",
+      "RESERVA_RECEITAS",
+      "UM",
       "QT_ENTRADA_PERIODO",
       "DT_ULTIMA_ENTRADA",
       "DT_ULTIMO_MOVIMENTO"
