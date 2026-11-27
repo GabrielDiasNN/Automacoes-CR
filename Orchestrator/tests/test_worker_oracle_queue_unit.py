@@ -112,7 +112,9 @@ def test_build_subprocess_env_nao_herda_deadline_epoch_do_pai_e_respeita_bordas(
         auto_queue_group="hub-global", exec_queue_group="hub-global"
     )
     exec_nao_oracle.automation.test_mode = True
-    env_nao_oracle = _build_subprocess_env(exec_nao_oracle, "EXEC-HUB-1", max_runtime=10)
+    env_nao_oracle = _build_subprocess_env(
+        exec_nao_oracle, "EXEC-HUB-1", max_runtime=10
+    )
     assert "ORACLE_QUEUE_DEADLINE_EPOCH" not in env_nao_oracle
     assert env_nao_oracle["ORCHESTRATOR_TEST_MODE"] == "true"
     assert env_nao_oracle["EXEC_ID"] == "EXEC-HUB-1"
@@ -224,11 +226,15 @@ def test_cleanup_oracle_queue_requests_corpo_real(
     monkeypatch.setenv("ORACLE_DRIVER_MODE", "queue")
     req_alvo = tmp_path / "req_alvo.sql"
     req_outro = tmp_path / "req_outro.sql"
-    req_alvo.write_text("--#meta:exec_id=EXEC-REAL-1\nSELECT 1 FROM dual\n", encoding="cp1252")
-    req_outro.write_text("--#meta:exec_id=EXEC-OUTRO\nSELECT 1 FROM dual\n", encoding="cp1252")
+    req_alvo.write_text(
+        "--#meta:exec_id=EXEC-REAL-1\nSELECT 1 FROM dual\n", encoding="cp1252"
+    )
+    req_outro.write_text(
+        "--#meta:exec_id=EXEC-OUTRO\nSELECT 1 FROM dual\n", encoding="cp1252"
+    )
     fake_mod = MagicMock()
-    fake_mod.cleanup_requests_for_exec_id.side_effect = (
-        lambda eid: 1 if eid == "EXEC-REAL-1" else 0
+    fake_mod.cleanup_requests_for_exec_id.side_effect = lambda eid: (
+        1 if eid == "EXEC-REAL-1" else 0
     )
     with (
         patch("worker.load_oracle_queue_module", return_value=fake_mod),
@@ -239,7 +245,11 @@ def test_cleanup_oracle_queue_requests_corpo_real(
     assert any("EXEC-REAL-1" in rec.message for rec in caplog.records)
 
     # Erros esperados de carga/SMB/host UNC são absorvidos sem propagar.
-    for erro in (ImportError("sem mod"), OSError("smb down"), ValueError("unc invalido")):
+    for erro in (
+        ImportError("sem mod"),
+        OSError("smb down"),
+        ValueError("unc invalido"),
+    ):
         with patch("worker.load_oracle_queue_module", side_effect=erro):
             cleanup_fn("EXEC-ERR")
 
@@ -251,9 +261,7 @@ def test_cleanup_oracle_queue_requests_corpo_real(
         cleanup_fn("EXEC-BUG")
 
 
-def _patch_worker_main_loop_base(
-    monkeypatch: pytest.MonkeyPatch, fake_db: Any
-) -> None:
+def _patch_worker_main_loop_base(monkeypatch: pytest.MonkeyPatch, fake_db: Any) -> None:
     @contextlib.contextmanager
     def _fake_scope(_factory: Any) -> Any:
         yield fake_db
@@ -274,7 +282,9 @@ def test_main_loop_shutdown_gracioso_executa_monitor_antes_de_terminate(
     del reset_worker_globals
     fake_auto = MagicMock(script_path="./run.ps1", max_runtime_minutes=10)
     fake_auto.name = "Oracle Test"
-    fake_exec = MagicMock(automation_id=1, status=EXECUTION_STATUS_PENDING, automation=fake_auto)
+    fake_exec = MagicMock(
+        automation_id=1, status=EXECUTION_STATUS_PENDING, automation=fake_auto
+    )
     fake_db = MagicMock()
     # _despachar_reivindicada consulta Execution e Automation; depois _iniciar_tarefa consulta Execution
     fake_db.query.return_value.filter.return_value.first.side_effect = [

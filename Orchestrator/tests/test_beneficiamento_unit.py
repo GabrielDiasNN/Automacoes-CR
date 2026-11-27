@@ -378,7 +378,10 @@ def test_init_db_pula_ddls_quando_atualizado_e_open_connection_fecha_com_pragmas
 ) -> None:
     db = init_db(tmp_path / "schema.db")
     with open_historico_connection(db, row_factory=None) as conn:
-        assert conn.execute("PRAGMA user_version;").fetchone()[0] == HISTORICO_SCHEMA_VERSION
+        assert (
+            conn.execute("PRAGMA user_version;").fetchone()[0]
+            == HISTORICO_SCHEMA_VERSION
+        )
         # Remove manualmente um indice para comprovar que init_db pula DDLs quando versionado.
         conn.execute("DROP INDEX idx_producao_numero_ob;")
         conn.commit()
@@ -437,7 +440,9 @@ def test_runner_generated_at_utc_e_profile_sem_numeric_values() -> None:
 
     _, analytics, _ = _build_snapshot_payloads_from_result(
         "diario",
-        QueryResult(columns=["NUMERO_OB"], rows=[("1",)], duplicate_columns={}, metadata={}),
+        QueryResult(
+            columns=["NUMERO_OB"], rows=[("1",)], duplicate_columns={}, metadata={}
+        ),
         sample_limit=3,
     )
     generated = datetime.fromisoformat(analytics["snapshot"]["generated_at"])

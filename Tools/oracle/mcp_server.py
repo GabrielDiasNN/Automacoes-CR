@@ -996,7 +996,10 @@ class OracleMcpTools:
             return {"error": True, "message": f"Erro na fila SMB Oracle: {exc}"}
         except TypeError as exc:
             # Param list/dict levantado por oracle_queue._encode_param
-            return {"error": True, "message": f"Parâmetro inválido para a fila Oracle: {exc}"}
+            return {
+                "error": True,
+                "message": f"Parâmetro inválido para a fila Oracle: {exc}",
+            }
 
     def _executar_pedido(self, conn: Any, pedido: _PedidoSql) -> dict[str, Any]:
         """Roda o pedido no cursor da conexão, dentro do prazo, e encerra o uso da conexão."""
@@ -1199,7 +1202,9 @@ class OracleMcpTools:
         try:
             if not descartar:
                 try:
-                    with call_deadline(conn, PRAZO_ROLLBACK_SEGUNDOS, threading.Event()):
+                    with call_deadline(
+                        conn, PRAZO_ROLLBACK_SEGUNDOS, threading.Event()
+                    ):
                         conn.rollback()
                 except ERROS_DRIVER:
                     descartar = True

@@ -232,7 +232,10 @@ def _primary_issue_for_period(
                 action_hint="Revisar os avisos de qualidade do período antes de ampliar o uso analítico.",
             ),
         )
-    if oracle.get("oracle_timeout_applied") is False and oracle.get("queue") is not True:
+    if (
+        oracle.get("oracle_timeout_applied") is False
+        and oracle.get("queue") is not True
+    ):
         return (
             "attention",
             "oracle_timeout_unapplied",

@@ -149,7 +149,9 @@ def init_oracle_thick_mode(
             return
         try:
             # Caminho vazio vira None: "" não é um diretório e mascararia o DPY-3015.
-            oracledb.init_oracle_client(lib_dir=client_lib or None, config_dir=tns_admin)
+            oracledb.init_oracle_client(
+                lib_dir=client_lib or None, config_dir=tns_admin
+            )
             ativado = True
         except oracledb.ProgrammingError as exc:
             # ERR_LIBRARY_ALREADY_INITIALIZED: init repetido com outros argumentos

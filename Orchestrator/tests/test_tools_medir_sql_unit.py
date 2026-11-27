@@ -697,7 +697,9 @@ def test_attempt_queue_classifica_transitorio_smb_e_retenta(
         )
 
     monkeypatch.setattr(mm, "executar_consulta_fila", falso_exec)
-    res = _run_with_retry(mm.QUEUE_MODE_SENTINEL, "select 1 from dual", {}, _opcoes(), False)
+    res = _run_with_retry(
+        mm.QUEUE_MODE_SENTINEL, "select 1 from dual", {}, _opcoes(), False
+    )
     assert res["status"] == "ok"
     assert res["attempts"] == 2
     assert len(chamadas) == 2
@@ -773,7 +775,9 @@ def test_verificar_funcoes_retenta_transitorio_em_queue_e_nativo(
 
     monkeypatch.setattr(mm, "verificar_objetos_fila", fila_falsa)
     assert (
-        mm.verificar_funcoes_no_oracle(mm.QUEUE_MODE_SENTINEL, "SELECT 1 FROM DUAL", 5.0)
+        mm.verificar_funcoes_no_oracle(
+            mm.QUEUE_MODE_SENTINEL, "SELECT 1 FROM DUAL", 5.0
+        )
         is None
     )
     assert len(chamadas_fila) == 2
@@ -818,7 +822,8 @@ def test_medir_bloqueia_acima_do_limite_de_nomes(
 ) -> None:
     colunas = ", ".join(f"C{i}" for i in range(501))
     sql_file = tmp_path / "muitos.sql"
-    sql_file.write_text(f"SELECT {colunas} FROM DUAL\n", encoding="utf-8")
+    sql_texto = " ".join(["SELECT", colunas, "FROM DUAL\n"])
+    sql_file.write_text(sql_texto, encoding="utf-8")
     monkeypatch.setattr(mm, "load_dotenv", lambda *_a, **_k: False)
     monkeypatch.setattr(
         mm,
@@ -835,8 +840,6 @@ def test_medir_bloqueia_acima_do_limite_de_nomes(
             ),
         ),
     )
-    args = argparse.Namespace(
-        file=sql_file, aceitar_funcoes_auditadas=False, bind=[]
-    )
+    args = argparse.Namespace(file=sql_file, aceitar_funcoes_auditadas=False, bind=[])
     with pytest.raises(SystemExit, match="aceita até 500"):
         _priv(mm, "_prepare")(args)

@@ -62,9 +62,7 @@ def _resultado_card_unico(exit_code: int) -> tuple[int, bool]:
     return EXIT_FALHA_ORQUESTRACAO, False
 
 
-def _resultado_lote(
-    entrega: hw.EntregaWhatsApp, exit_code: int
-) -> tuple[int, bool]:
+def _resultado_lote(entrega: hw.EntregaWhatsApp, exit_code: int) -> tuple[int, bool]:
     if entrega.status == "AllSent":
         return 0, True
     if entrega.status == "PartialSent":
@@ -200,7 +198,9 @@ def _executar_promocao(
     if not ok_pf:
         return hr.oracle_preflight_exit_code(
             oracle_pf,
-            outros_checks=lambda: hr.run_preflight(ctx, [Path(sys.executable), sql_path]),
+            outros_checks=lambda: hr.run_preflight(
+                ctx, [Path(sys.executable), sql_path]
+            ),
         )
 
     hr.start_step(ctx, "extract", mensagem=f"Executando {cfg.consulta}")

@@ -418,12 +418,10 @@ def test_regras_rejeita_nao_finitos_e_compara_numericamente_eq_ne_in() -> None:
         {"COD": 2, "VAL": 10},
     ]
     assert [
-        r["COD"]
-        for r in filtrar_excecoes(rows, [CondicaoFiltro("COD", "eq", 0)])
+        r["COD"] for r in filtrar_excecoes(rows, [CondicaoFiltro("COD", "eq", 0)])
     ] == [0.0]
     assert [
-        r["COD"]
-        for r in filtrar_excecoes(rows, [CondicaoFiltro("COD", "ne", "0")])
+        r["COD"] for r in filtrar_excecoes(rows, [CondicaoFiltro("COD", "ne", "0")])
     ] == ["1.50", 2]
     assert [
         r["COD"]
@@ -468,9 +466,7 @@ def test_despachar_excecoes_limpa_chaves_resolvidas_em_estado_fora_dry_run(
 
     # Com "200" ainda dentro do TTL e "100" resolvida, persiste remocao de "100"
     assert (
-        _despachar_excecoes(
-            ctx, cfg, tmp_path, [{"NUMERO_OB": "200"}], dry_run=False
-        )
+        _despachar_excecoes(ctx, cfg, tmp_path, [{"NUMERO_OB": "200"}], dry_run=False)
         == 0
     )
     assert set(ler_estado(state_path).keys()) == {"200"}

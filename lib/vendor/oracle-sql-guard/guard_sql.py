@@ -39,13 +39,31 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 DML = {"INSERT", "UPDATE", "DELETE", "MERGE", "UPSERT"}
-DDL = {"CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME", "COMMENT", "GRANT", "REVOKE",
-       "PURGE", "FLASHBACK", "ANALYZE", "AUDIT", "NOAUDIT", "ASSOCIATE", "DISASSOCIATE"}
+DDL = {
+    "CREATE",
+    "ALTER",
+    "DROP",
+    "TRUNCATE",
+    "RENAME",
+    "COMMENT",
+    "GRANT",
+    "REVOKE",
+    "PURGE",
+    "FLASHBACK",
+    "ANALYZE",
+    "AUDIT",
+    "NOAUDIT",
+    "ASSOCIATE",
+    "DISASSOCIATE",
+}
 PLSQL = {"BEGIN", "DECLARE", "CALL", "EXEC", "EXECUTE"}
 TRANSACAO = {"COMMIT", "ROLLBACK", "SAVEPOINT", "SET", "LOCK"}
 LEITURA = {"SELECT", "WITH"}
 # Chamadas que saem do banco, gravam ou executam código: bloqueiam (exigem checkpoint).
-PACOTES_SENSIVEIS = re.compile(r"\b(DBMS_\w+|UTL_\w+|OWA_\w+|APEX_\w+|HTP|\w*URITYPE|XMLTYPE|XMLPARSE|BFILENAME|SYS)\b", re.I)
+PACOTES_SENSIVEIS = re.compile(
+    r"\b(DBMS_\w+|UTL_\w+|OWA_\w+|APEX_\w+|HTP|\w*URITYPE|XMLTYPE|XMLPARSE|BFILENAME|SYS)\b",
+    re.I,
+)
 # Funções nativas de leitura aceitas sem qualificação. Qualquer outra "nome(" bloqueia:
 # pode ser função do usuário com efeito colateral (PRAGMA AUTONOMOUS_TRANSACTION).
 FUNCOES_NATIVAS = frozenset("""
@@ -82,8 +100,12 @@ MATCH_RECOGNIZE CONNECT START WITH ORDER SET NUMBER VARCHAR2 VARCHAR CHAR NCHAR 
 FLOAT DECIMAL INTEGER DATE ESCAPE
 """.split())
 # Leituras de pacotes comprovadamente sem efeito colateral.
-PERMITIDOS = re.compile(r"\bDBMS_XPLAN\s*\.\s*DISPLAY\w*\s*\(|\bDBMS_METADATA\s*\.\s*GET_\w+\s*\(", re.I)
-CHAMADA_QUALIFICADA = re.compile(r"\b[A-Za-z_][\w$#]*\s*\.\s*[A-Za-z_][\w$#]*(\s*\.\s*[A-Za-z_][\w$#]*)?\s*\(")
+PERMITIDOS = re.compile(
+    r"\bDBMS_XPLAN\s*\.\s*DISPLAY\w*\s*\(|\bDBMS_METADATA\s*\.\s*GET_\w+\s*\(", re.I
+)
+CHAMADA_QUALIFICADA = re.compile(
+    r"\b[A-Za-z_][\w$#]*\s*\.\s*[A-Za-z_][\w$#]*(\s*\.\s*[A-Za-z_][\w$#]*)?\s*\("
+)
 # GROUPING SETS (Oracle 9i+) é cláusula do GROUP BY, não chamada: sem esta troca o laço de
 # chamadas lê "SETS(" como função desconhecida. Só "GROUP BY GROUPING SETS (" vira
 # "GROUP BY (": as duas palavras saem da análise e a lista de conjuntos segue normalmente.
@@ -95,8 +117,6 @@ CTE_QID_LISTA = re.compile(
     r"(?<![\w$#.])((?:WITH|,)\s+)QID\s*\(\s*[A-Za-z_][\w$#]*(?:\s*,\s*[A-Za-z_][\w$#]*)*\s*\)\s+AS\s*\(",
     re.I,
 )
-
-
 
 
 def _fim_linha(sql: str, i: int) -> int:
@@ -262,7 +282,11 @@ def _separar_instrucoes(limpo: str, corpo_plsql: bool) -> list[str]:
     """Divide o texto em instruções pelo `;`. Blocos PL/SQL e DDL com corpo ficam inteiros."""
     if corpo_plsql:
         return [limpo.strip().rstrip("/").strip()]
-    return [parte.strip() for parte in re.split(r";|^\s*/\s*$", limpo, flags=re.M) if parte.strip()]
+    return [
+        parte.strip()
+        for parte in re.split(r";|^\s*/\s*$", limpo, flags=re.M)
+        if parte.strip()
+    ]
 
 
 def _checar_bloqueios_de_leitura(
@@ -275,12 +299,16 @@ def _checar_bloqueios_de_leitura(
     if primeira == "WITH" and re.match(r"WITH\s+(FUNCTION|PROCEDURE)\b", upper.strip()):
         _bloquear(resultado, "plsql")
         resultado["motivos"].append("WITH FUNCTION/PROCEDURE executa PL/SQL")
-    if re.search(r"\b(INSERT|UPDATE|DELETE|MERGE)\b", upper) and not re.search(r"\bFOR\s+UPDATE\b", upper):
+    if re.search(r"\b(INSERT|UPDATE|DELETE|MERGE)\b", upper) and not re.search(
+        r"\bFOR\s+UPDATE\b", upper
+    ):
         _bloquear(resultado, "mutacao")
         resultado["motivos"].append("palavra-chave de DML dentro de consulta")
 
 
-def _checar_chamadas(instrucao: str, citados: list[str], resultado: dict[str, Any]) -> None:
+def _checar_chamadas(
+    instrucao: str, citados: list[str], resultado: dict[str, Any]
+) -> None:
     """Chamadas de função, pacote ou tipo capazes de efeito colateral ou de rede."""
     for dis in re.finditer(r"\bDBMS_XPLAN\s*\.\s*DISPLAY\w*\s*\(", instrucao, re.I):
         abre = dis.end() - 1
@@ -301,7 +329,9 @@ def _checar_chamadas(instrucao: str, citados: list[str], resultado: dict[str, An
     sensiveis |= {c.upper() for c in citados if PACOTES_SENSIVEIS.fullmatch(c.strip())}
     if sensiveis:
         _bloquear(resultado, "chamada_sensivel")
-        resultado["motivos"].append(f"pacote/tipo capaz de rede, escrita ou execução: {sorted(sensiveis)}")
+        resultado["motivos"].append(
+            f"pacote/tipo capaz de rede, escrita ou execução: {sorted(sensiveis)}"
+        )
     if CHAMADA_QUALIFICADA.search(sem_permitidos) or (
         citados
         and re.search(
@@ -310,38 +340,66 @@ def _checar_chamadas(instrucao: str, citados: list[str], resultado: dict[str, An
         )
     ):
         _bloquear(resultado, "chamada_funcao")
-        resultado["motivos"].append("chamada a função/procedimento de pacote ou schema (pode ter efeito colateral, ex.: autonomous transaction)")
+        resultado["motivos"].append(
+            "chamada a função/procedimento de pacote ou schema (pode ter efeito colateral, ex.: autonomous transaction)"
+        )
     for chamada in re.finditer(r"(?<![\w$#.])([A-Za-z_][\w$#]*)\s*\(", sem_permitidos):
         nome_funcao = chamada.group(1).upper()
-        if nome_funcao not in FUNCOES_NATIVAS and nome_funcao not in PALAVRAS_ANTES_DE_PARENTESE:
+        if (
+            nome_funcao not in FUNCOES_NATIVAS
+            and nome_funcao not in PALAVRAS_ANTES_DE_PARENTESE
+        ):
             _bloquear(resultado, "chamada_funcao")
             resultado["motivos"].append(
                 f"função não reconhecida como nativa de leitura: {nome_funcao}( — pode ser função do usuário com efeito colateral"
             )
             break
-    if re.search(r"\bTABLE\s*\(\s*(?!\()(?!SELECT\b)(?!CAST\b)[A-Za-z_\"]", sem_permitidos, re.I):
+    if re.search(
+        r"\bTABLE\s*\(\s*(?!\()(?!SELECT\b)(?!CAST\b)[A-Za-z_\"]", sem_permitidos, re.I
+    ):
         _bloquear(resultado, "chamada_funcao")
-        resultado["motivos"].append("TABLE(função) executa função de tabela (pipelined) do usuário")
+        resultado["motivos"].append(
+            "TABLE(função) executa função de tabela (pipelined) do usuário"
+        )
 
 
-def _checar_operacoes_especiais(instrucao: str, upper: str, resultado: dict[str, Any]) -> None:
+def _checar_operacoes_especiais(
+    instrucao: str, upper: str, resultado: dict[str, Any]
+) -> None:
     """CONNECT BY (aviso), NEXTVAL (bloqueio) e database link (bloqueio)."""
     if re.search(r"\bCONNECT\s+BY\b", upper) and not re.search(r"\bNOCYCLE\b", upper):
-        resultado["avisos"].append("CONNECT BY: confirme condição de parada/volume com get_query_plan antes")
+        resultado["avisos"].append(
+            "CONNECT BY: confirme condição de parada/volume com get_query_plan antes"
+        )
     if re.search(r"\bNEXTVAL\b", upper):
         _bloquear(resultado, "sequence")
-        resultado["motivos"].append("NEXTVAL consome valor de sequence (efeito colateral)")
+        resultado["motivos"].append(
+            "NEXTVAL consome valor de sequence (efeito colateral)"
+        )
     if re.search(r"@\s*[A-Za-z_]", instrucao):
         _bloquear(resultado, "dblink")
-        resultado["motivos"].append("database link (@): consulta outro banco; exige aprovação")
+        resultado["motivos"].append(
+            "database link (@): consulta outro banco; exige aprovação"
+        )
 
 
 def _checar_limite(upper: str, resultado: dict[str, Any], exigir_limite: bool) -> None:
     """Consulta sem limite de linhas vira aviso, ou bloqueio quando `exigir_limite`."""
     externo = _nivel_externo(upper)
-    tem_limite = None if re.search(r"\bOR\b", externo) and "ROWNUM" in externo and not re.search(r"\bFETCH\s+(FIRST|NEXT)\b", externo) else re.search(r"\bFETCH\s+(FIRST|NEXT)\s+\d{1,6}\s+ROWS?\b|\bROWNUM\s*<=?\s*\d{1,6}\b", externo)
+    tem_limite = (
+        None
+        if re.search(r"\bOR\b", externo)
+        and "ROWNUM" in externo
+        and not re.search(r"\bFETCH\s+(FIRST|NEXT)\b", externo)
+        else re.search(
+            r"\bFETCH\s+(FIRST|NEXT)\s+\d{1,6}\s+ROWS?\b|\bROWNUM\s*<=?\s*\d{1,6}\b",
+            externo,
+        )
+    )
     if not tem_limite:
-        msg = "consulta sem limite de linhas (use FETCH FIRST n ROWS ONLY ou ROWNUM <= n)"
+        msg = (
+            "consulta sem limite de linhas (use FETCH FIRST n ROWS ONLY ou ROWNUM <= n)"
+        )
         if exigir_limite:
             resultado["permitido"] = False
             resultado["motivos"].append(msg)
@@ -371,16 +429,22 @@ def _classificar_comando(primeira: str, resultado: dict[str, Any]) -> None:
         resultado["motivos"].append(f"DML ({primeira}) altera dados")
     elif primeira in DDL:
         _bloquear(resultado, "ddl")
-        resultado["motivos"].append(f"DDL/DCL ({primeira}) altera estrutura/permissões e faz COMMIT implícito")
+        resultado["motivos"].append(
+            f"DDL/DCL ({primeira}) altera estrutura/permissões e faz COMMIT implícito"
+        )
     elif primeira in PLSQL:
         _bloquear(resultado, "plsql")
-        resultado["motivos"].append(f"bloco/chamada PL/SQL ({primeira}) pode fazer qualquer coisa")
+        resultado["motivos"].append(
+            f"bloco/chamada PL/SQL ({primeira}) pode fazer qualquer coisa"
+        )
     elif primeira in TRANSACAO:
         _bloquear(resultado, "transacao")
         resultado["motivos"].append(f"controle de transação/sessão ({primeira})")
     else:
         _bloquear(resultado, "desconhecido")
-        resultado["motivos"].append(f"palavra-chave inicial não reconhecida: {primeira}")
+        resultado["motivos"].append(
+            f"palavra-chave inicial não reconhecida: {primeira}"
+        )
 
 
 def _classificar_instrucao(
@@ -395,7 +459,9 @@ def _classificar_instrucao(
     primeira = tokens[0].upper()
     if primeira == "EXPLAIN":
         _bloquear(resultado, "plano")
-        resultado["motivos"].append("EXPLAIN PLAN grava em tabela (PLAN_TABLE ou INTO); use a ferramenta get_query_plan do MCP")
+        resultado["motivos"].append(
+            "EXPLAIN PLAN grava em tabela (PLAN_TABLE ou INTO); use a ferramenta get_query_plan do MCP"
+        )
         return
     if primeira in LEITURA:
         _checar_leitura(instrucao, primeira, citados, resultado, exigir_limite)
@@ -403,13 +469,22 @@ def _classificar_instrucao(
     _classificar_comando(primeira, resultado)
 
 
-def _anexar_verificacao(limpo: str, citados: list[str], resultado: dict[str, Any]) -> None:
+def _anexar_verificacao(
+    limpo: str, citados: list[str], resultado: dict[str, Any]
+) -> None:
     """Função sem argumentos pode ser chamada sem parênteses (SELECT fn FROM dual): o texto não
     distingue coluna de função. Devolve a consulta que tira a dúvida."""
     nomes: set[str] = set()
-    for token in re.findall(r"(?<![\w$#'])[A-Za-z_][\w$#]*", PERMITIDOS.sub(" ", limpo)):
+    for token in re.findall(
+        r"(?<![\w$#'])[A-Za-z_][\w$#]*", PERMITIDOS.sub(" ", limpo)
+    ):
         nome = token.upper()
-        if nome not in PALAVRAS_SQL and nome not in FUNCOES_NATIVAS and nome not in PALAVRAS_ANTES_DE_PARENTESE and not nome.startswith(("V$", "GV$")):
+        if (
+            nome not in PALAVRAS_SQL
+            and nome not in FUNCOES_NATIVAS
+            and nome not in PALAVRAS_ANTES_DE_PARENTESE
+            and not nome.startswith(("V$", "GV$"))
+        ):
             nomes.add(nome)
     nomes |= {c for c in citados if re.fullmatch(r"[A-Za-z_][\w$#]*", c)}
     if nomes:
@@ -426,20 +501,45 @@ def _anexar_verificacao(limpo: str, citados: list[str], resultado: dict[str, Any
 
 
 def classificar(sql: str, exigir_limite: bool = False) -> dict[str, Any]:
-    resultado: dict[str, Any] = {"classe": "leitura", "permitido": True, "motivos": [], "avisos": [], "instrucoes": 0}
+    resultado: dict[str, Any] = {
+        "classe": "leitura",
+        "permitido": True,
+        "motivos": [],
+        "avisos": [],
+        "instrucoes": 0,
+    }
     if not sql or not sql.strip():
-        return {**resultado, "classe": "invalido", "permitido": False, "motivos": ["SQL vazio"]}
+        return {
+            **resultado,
+            "classe": "invalido",
+            "permitido": False,
+            "motivos": ["SQL vazio"],
+        }
     if re.search(r"/\*\+[^*]*\bPARALLEL\b", sql, re.I):
-        resultado["avisos"].append("hint PARALLEL: pode consumir muitos recursos do servidor; confirme com o usuário")
+        resultado["avisos"].append(
+            "hint PARALLEL: pode consumir muitos recursos do servidor; confirme com o usuário"
+        )
     citados: list[str] = []
     try:
-        limpo = normalizar_cte_qid(normalizar_grouping_sets(remover_literais_e_comentarios(sql, citados)))
+        limpo = normalizar_cte_qid(
+            normalizar_grouping_sets(remover_literais_e_comentarios(sql, citados))
+        )
     except ValueError as exc:
-        return {**resultado, "classe": "invalido", "permitido": False, "motivos": [str(exc)]}
+        return {
+            **resultado,
+            "classe": "invalido",
+            "permitido": False,
+            "motivos": [str(exc)],
+        }
 
     inicio = re.findall(r"[A-Za-z_]+", limpo)
     if not inicio:
-        return {**resultado, "classe": "invalido", "permitido": False, "motivos": ["só comentários"]}
+        return {
+            **resultado,
+            "classe": "invalido",
+            "permitido": False,
+            "motivos": ["só comentários"],
+        }
     primeira_global = inicio[0].upper()
     # Blocos PL/SQL e DDL contêm ';' internos: classificar o texto inteiro.
     corpo_plsql = (
@@ -451,7 +551,9 @@ def classificar(sql: str, exigir_limite: bool = False) -> dict[str, Any]:
     resultado["instrucoes"] = len(instrucoes)
     if len(instrucoes) > 1:
         resultado["permitido"] = False
-        resultado["motivos"].append(f"{len(instrucoes)} instruções em um envio; envie uma por vez")
+        resultado["motivos"].append(
+            f"{len(instrucoes)} instruções em um envio; envie uma por vez"
+        )
 
     for instrucao in instrucoes:
         _classificar_instrucao(instrucao, citados, resultado, exigir_limite)
@@ -466,7 +568,13 @@ def _achar_sql(obj: Any) -> str | None:
     """Procura recursivamente argumentos 'sql'/'query' no payload do hook."""
     if isinstance(obj, dict):
         for chave, valor in obj.items():
-            if str(chave).lower() in ("sql", "query", "statement", "sql_statement", "sqlquery") and isinstance(valor, str):
+            if str(chave).lower() in (
+                "sql",
+                "query",
+                "statement",
+                "sql_statement",
+                "sqlquery",
+            ) and isinstance(valor, str):
                 return valor
         for valor in obj.values():
             achado = _achar_sql(valor)
@@ -481,7 +589,11 @@ def _achar_sql(obj: Any) -> str | None:
 
 
 def _ler_stdin() -> str:
-    bruto = sys.stdin.buffer.read() if hasattr(sys.stdin, "buffer") else sys.stdin.read().encode("utf-8")
+    bruto = (
+        sys.stdin.buffer.read()
+        if hasattr(sys.stdin, "buffer")
+        else sys.stdin.read().encode("utf-8")
+    )
     for codificacao in ("utf-8-sig", "cp1252", "latin-1"):
         try:
             return bruto.decode(codificacao)
@@ -513,25 +625,43 @@ def modo_hook() -> int:
 
     try:
         payload = _expandir_strings_json(json.loads(_ler_stdin() or "{}"))
-        alvo = payload.get("toolCall", payload) if isinstance(payload, dict) else payload
+        alvo = (
+            payload.get("toolCall", payload) if isinstance(payload, dict) else payload
+        )
         sql = _achar_sql(alvo)
         if sql is None:
-            return responder("force_ask", "guard_sql: não encontrei a SQL no payload; confirme manualmente")
+            return responder(
+                "force_ask",
+                "guard_sql: não encontrei a SQL no payload; confirme manualmente",
+            )
         analise = classificar(sql)
         if analise["permitido"]:
             return responder("ask", "guard_sql: leitura")
-        return responder("force_ask", "guard_sql: CHECKPOINT HUMANO — " + "; ".join(analise["motivos"]))
-    except Exception as exc:  # pylint: disable=broad-exception-caught  # hook nunca pode falhar aberto
-        return responder("force_ask", f"guard_sql: erro ao analisar ({type(exc).__name__}); confirme manualmente")
+        return responder(
+            "force_ask",
+            "guard_sql: CHECKPOINT HUMANO — " + "; ".join(analise["motivos"]),
+        )
+    # hook nunca pode falhar aberto
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return responder(
+            "force_ask",
+            f"guard_sql: erro ao analisar ({type(exc).__name__}); confirme manualmente",
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Classifica SQL Oracle antes de executar via MCP.")
+    parser = argparse.ArgumentParser(
+        description="Classifica SQL Oracle antes de executar via MCP."
+    )
     grupo = parser.add_mutually_exclusive_group()
     grupo.add_argument("--sql")
     grupo.add_argument("--arquivo")
     grupo.add_argument("--hook", action="store_true")
-    parser.add_argument("--exigir-limite", action="store_true", help="Bloqueia SELECT sem FETCH FIRST/ROWNUM.")
+    parser.add_argument(
+        "--exigir-limite",
+        action="store_true",
+        help="Bloqueia SELECT sem FETCH FIRST/ROWNUM.",
+    )
     args = parser.parse_args(argv)
     if args.hook:
         return modo_hook()
@@ -546,7 +676,12 @@ def main(argv: list[str] | None = None) -> int:
                 except UnicodeDecodeError:
                     continue
         except OSError as exc:
-            print(json.dumps({"classe": "invalido", "permitido": False, "motivos": [str(exc)]}, ensure_ascii=False))
+            print(
+                json.dumps(
+                    {"classe": "invalido", "permitido": False, "motivos": [str(exc)]},
+                    ensure_ascii=False,
+                )
+            )
             return 1
     elif args.sql is not None:
         sql = args.sql

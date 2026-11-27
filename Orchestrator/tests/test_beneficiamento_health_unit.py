@@ -356,7 +356,10 @@ def test_modo_queue_nao_marca_oracle_timeout_unapplied(tmp_path: Path) -> None:
             {
                 "qualidade": {"status": "ok"},
                 "execucao_oracle": {
-                    "consulta_principal": {"oracle_timeout_applied": False, "queue": True}
+                    "consulta_principal": {
+                        "oracle_timeout_applied": False,
+                        "queue": True,
+                    }
                 },
             },
             history_write_failed=False,
@@ -368,7 +371,10 @@ def test_modo_queue_nao_marca_oracle_timeout_unapplied(tmp_path: Path) -> None:
             {
                 "qualidade": {"status": "ok"},
                 "execucao_oracle": {
-                    "consulta_principal": {"oracle_timeout_applied": False, "queue": False}
+                    "consulta_principal": {
+                        "oracle_timeout_applied": False,
+                        "queue": False,
+                    }
                 },
             },
             history_write_failed=False,
@@ -381,15 +387,26 @@ def test_modo_queue_nao_marca_oracle_timeout_unapplied(tmp_path: Path) -> None:
     ("quality_payload", "expected_code"),
     [
         (
-            {"status": "blocked", "checks": [{"name": "schema_presence", "missing": ["QT_KG"]}]},
+            {
+                "status": "blocked",
+                "checks": [{"name": "schema_presence", "missing": ["QT_KG"]}],
+            },
             "quality_missing_required_columns",
         ),
         (
-            {"status": "blocked", "checks": [{"name": "critical_nulls", "columns": [{"column": "NUMERO_OB"}]}]},
+            {
+                "status": "blocked",
+                "checks": [
+                    {"name": "critical_nulls", "columns": [{"column": "NUMERO_OB"}]}
+                ],
+            },
             "quality_critical_nulls",
         ),
         (
-            {"status": "blocked", "checks": [{"name": "group_key_uniqueness", "duplicate_rows": 2}]},
+            {
+                "status": "blocked",
+                "checks": [{"name": "group_key_uniqueness", "duplicate_rows": 2}],
+            },
             "quality_duplicate_keys",
         ),
         (

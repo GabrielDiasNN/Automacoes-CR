@@ -819,9 +819,7 @@ def test_acquire_e_release_nao_seguram_lock_concorrente(
     mgr = OracleConnectionManager(cfg)
     try:
         resultado: list[Any] = []
-        t = threading.Thread(
-            target=lambda: resultado.append(mgr.acquire_connection())
-        )
+        t = threading.Thread(target=lambda: resultado.append(mgr.acquire_connection()))
         t.start()
         assert entrou_acquire.wait(timeout=3)
         mgr.release_connection(MagicMock(name="outra_conn"))

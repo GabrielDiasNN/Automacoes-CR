@@ -658,9 +658,7 @@ def _encode_param(name: str, value: Any) -> str:
         enc = f"n:{int(value)}"
     elif isinstance(value, Decimal):
         if not value.is_finite():
-            raise ValueError(
-                f"Valor Decimal não finito no parâmetro :{key}: {value!r}"
-            )
+            raise ValueError(f"Valor Decimal não finito no parâmetro :{key}: {value!r}")
         enc = f"n:{value}"
     elif isinstance(value, int):
         enc = f"n:{value}"

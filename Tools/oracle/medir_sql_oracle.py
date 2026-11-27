@@ -595,9 +595,7 @@ def _excecao_funcoes(
     }
 
 
-def _verificar_funcoes_uma_vez(
-    creds: Any, consulta: str, timeout: float
-) -> str | None:
+def _verificar_funcoes_uma_vez(creds: Any, consulta: str, timeout: float) -> str | None:
     if creds is QUEUE_MODE_SENTINEL:
         motivo_fila = verificar_objetos_fila(
             consulta, timeout=timeout, exec_id="MEDIR_GUARD"

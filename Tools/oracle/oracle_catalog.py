@@ -344,7 +344,9 @@ def cmd_path(args: argparse.Namespace) -> int:
                 (cons_name,),
             ).fetchall()
             col_list = ", ".join(c["column_name"] for c in cols)
-            print(f"  JOIN {dst} ON ({col_list}) -- via {cons_name} (a partir de {src})")
+            print(
+                f"  JOIN {dst} ON ({col_list}) -- via {cons_name} (a partir de {src})"
+            )
     return 0
 
 
@@ -446,7 +448,9 @@ def cmd_queries(args: argparse.Namespace) -> int:
 
 def cmd_usage(_args: argparse.Namespace) -> int:
     with contextlib.closing(_connect_catalog()) as conn:
-        known = {r["object_name"] for r in conn.execute("SELECT object_name FROM objects")}
+        known = {
+            r["object_name"] for r in conn.execute("SELECT object_name FROM objects")
+        }
     sql_files = sorted(ROOT.glob("**/*.sql"))
     sql_files = [
         f for f in sql_files if ".venv" not in f.parts and "node_modules" not in f.parts
@@ -846,7 +850,9 @@ def cmd_distinct(args: argparse.Namespace) -> int:
             )
             return 1
 
-        desc_col = _find_description_column(conn, table, column) if args.with_desc else None
+        desc_col = (
+            _find_description_column(conn, table, column) if args.with_desc else None
+        )
         select_cols = f"{column}, {desc_col}" if desc_col else column
         limit = max(1, min(args.limit, DEFAULT_DISTINCT_ROWS * 4))
         sql = (
@@ -936,7 +942,9 @@ def cmd_sample(args: argparse.Namespace) -> int:
     with contextlib.closing(_connect_catalog()) as conn:
         select_cols = _resolve_sample_select_cols(conn, table, args.columns)
         if select_cols is None:
-            print(f"[ERRO] Tabela '{table}' nao existe no catalogo (ou colunas invalidas).")
+            print(
+                f"[ERRO] Tabela '{table}' nao existe no catalogo (ou colunas invalidas)."
+            )
             return 1
         where_clause, ok = _resolve_sample_where_clause(args.where)
         if not ok:

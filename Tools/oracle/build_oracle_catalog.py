@@ -363,10 +363,7 @@ def _insert_objects_and_columns(
     deduped = _dedupe_objects_by_name(data.objects) if objects is None else objects
     conn.executemany(
         "INSERT INTO objects VALUES (?, ?, ?, ?, ?, ?)",
-        [
-            (o[0], o[1], o[2], o[3], str(o[4]) if o[4] else None, o[5])
-            for o in deduped
-        ],
+        [(o[0], o[1], o[2], o[3], str(o[4]) if o[4] else None, o[5]) for o in deduped],
     )
     conn.executemany(
         "INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

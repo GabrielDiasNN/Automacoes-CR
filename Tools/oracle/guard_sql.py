@@ -168,9 +168,9 @@ def normalize_cte_column_lists(sql: str) -> str:
 
 
 def patch_canonical(canonical: Any) -> Any:
-    if getattr(
-        canonical.remover_literais_e_comentarios, "__qualname__", ""
-    ).startswith("patch_canonical."):
+    if getattr(canonical.remover_literais_e_comentarios, "__qualname__", "").startswith(
+        "patch_canonical."
+    ):
         return canonical
     original = canonical.remover_literais_e_comentarios
 

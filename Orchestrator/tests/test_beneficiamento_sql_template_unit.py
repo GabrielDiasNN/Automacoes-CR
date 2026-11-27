@@ -19,7 +19,9 @@ from beneficiamento.data import writer
 _LINE_COMMENT_RE = re.compile(r"--[^\n]*")
 _BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 _AS_ALIAS_RE = re.compile(r"\bAS\s+([A-Z_][A-Z0-9_$#]*)\s*$", re.IGNORECASE)
-_TRAILING_COL_RE = re.compile(r"(?:[A-Z_][A-Z0-9_$#]*\.)?([A-Z_][A-Z0-9_$#]*)\s*$", re.IGNORECASE)
+_TRAILING_COL_RE = re.compile(
+    r"(?:[A-Z_][A-Z0-9_$#]*\.)?([A-Z_][A-Z0-9_$#]*)\s*$", re.IGNORECASE
+)
 
 
 def _strip_sql_comments(sql: str) -> str:
@@ -63,7 +65,9 @@ def _is_word_boundary(text: str, start: int, length: int) -> bool:
     return prev_ok and next_ok
 
 
-def _find_top_level_keyword(sql: str, keyword: str, *, start_after: int = 0, last: bool = False) -> int:
+def _find_top_level_keyword(
+    sql: str, keyword: str, *, start_after: int = 0, last: bool = False
+) -> int:
     upper = sql.upper()
     kw_len = len(keyword)
     matches = [
@@ -79,7 +83,9 @@ def _find_top_level_keyword(sql: str, keyword: str, *, start_after: int = 0, las
 
 
 def _split_top_level_commas(select_list: str) -> list[str]:
-    comma_positions = [idx for idx, ch in _iter_top_level_tokens(select_list) if ch == ","]
+    comma_positions = [
+        idx for idx, ch in _iter_top_level_tokens(select_list) if ch == ","
+    ]
     parts: list[str] = []
     prev = 0
     for pos in comma_positions:
@@ -152,13 +158,13 @@ def test_template_detalhado_projeta_todas_as_colunas_de_field_specs_e_qualidade(
         for spec in writer.FIELD_SPECS
         if not any(src.upper() in projected for src in spec.sources)
     ]
-    assert not specs_sem_fonte, (
-        f"Colunas de FIELD_SPECS sem fonte projetada no template: {specs_sem_fonte}"
-    )
+    assert (
+        not specs_sem_fonte
+    ), f"Colunas de FIELD_SPECS sem fonte projetada no template: {specs_sem_fonte}"
 
     ausentes_qualidade = [
         col for col in quality.DETAILED_REQUIRED_COLUMNS if col.upper() not in projected
     ]
-    assert not ausentes_qualidade, (
-        f"DETAILED_REQUIRED_COLUMNS ausentes no template: {ausentes_qualidade}"
-    )
+    assert (
+        not ausentes_qualidade
+    ), f"DETAILED_REQUIRED_COLUMNS ausentes no template: {ausentes_qualidade}"

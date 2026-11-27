@@ -492,10 +492,12 @@ def _status_geral(findings: list[dict[str, Any]]) -> str:
     # sem marcar o Orchestrator como "unhealthy" (alinhado com /health/full).
     max_severity = max(
         (
-            1
-            if item.get("component") == "oracle_queue"
-            and item.get("severity") == SEVERITY_ERROR
-            else severity_rank.get(item["severity"], 0)
+            (
+                1
+                if item.get("component") == "oracle_queue"
+                and item.get("severity") == SEVERITY_ERROR
+                else severity_rank.get(item["severity"], 0)
+            )
             for item in findings
         ),
         default=0,
@@ -596,7 +598,9 @@ def _oracle_queue_baseline_metric(
     elif oracle_ok is False:
         status = BASELINE_STATUS_ATTENTION
         current_value = "sem Oracle PRD"
-        detail = "Worker Oracle no TSplus reportou perda de conexão com o banco Oracle PRD."
+        detail = (
+            "Worker Oracle no TSplus reportou perda de conexão com o banco Oracle PRD."
+        )
     else:
         status = BASELINE_STATUS_HEALTHY
         current_value = f"{age} s" if age is not None else "online"

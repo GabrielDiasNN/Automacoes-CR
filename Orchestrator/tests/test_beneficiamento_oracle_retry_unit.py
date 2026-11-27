@@ -411,7 +411,9 @@ def test_execute_query_carrega_dotenv_antes_de_ler_driver_mode_queue(
 
     monkeypatch.setattr(oracle, "queue_execute_query", fila_falsa)
 
-    res = oracle.execute_query("SELECT 42 FROM DUAL", max_rows=10, oracle_timeout_ms=18000)
+    res = oracle.execute_query(
+        "SELECT 42 FROM DUAL", max_rows=10, oracle_timeout_ms=18000
+    )
     assert res.rows == [(42,)]
     assert res.metadata["queue"] is True
     assert isinstance(res.metadata["oracle_timeout_warning"], str)
@@ -469,7 +471,9 @@ def test_metadata_nativa_sem_cursor_description_tem_schema_unificado(
     conexao.cursor_falso.description = None  # type: ignore[assignment]
     monkeypatch.setattr(oracle, "connect_readonly", lambda: conexao)
 
-    resultado = oracle.execute_query("SELECT 1", wall_clock_budget_seconds=5, max_rows=50)
+    resultado = oracle.execute_query(
+        "SELECT 1", wall_clock_budget_seconds=5, max_rows=50
+    )
 
     assert resultado.rows == []
     assert resultado.metadata["oracle_watchdog_applied"] is True

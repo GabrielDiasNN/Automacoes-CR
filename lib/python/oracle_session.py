@@ -131,7 +131,9 @@ def cancel_after(
             if encerrado:
                 return
             fired.set()
-        with contextlib.suppress(Exception):  # cancelamento best effort (inclui sessão já derrubada)
+        with contextlib.suppress(
+            Exception
+        ):  # cancelamento best effort (inclui sessão já derrubada)
             connection.cancel()
 
     timer = threading.Timer(max(seconds, _MIN_WAIT_SECONDS), fire)

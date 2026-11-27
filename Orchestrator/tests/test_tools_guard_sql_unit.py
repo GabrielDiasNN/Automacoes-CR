@@ -327,6 +327,10 @@ def test_canonico_nao_trata_identificador_terminado_em_n_como_prefixo_nq() -> No
     assert "DELETE" in limpo
     assert canon.classificar(sql_desync)["permitido"] is False
     # nq'[...]' legítimo continua sendo consumido como literal
-    limpo_legitimo = canon.remover_literais_e_comentarios("SELECT nq'[; DELETE FROM t]' FROM dual")
+    limpo_legitimo = canon.remover_literais_e_comentarios(
+        "SELECT nq'[; DELETE FROM t]' FROM dual"
+    )
     assert "DELETE" not in limpo_legitimo
-    assert canon.classificar("SELECT nq'[; DELETE FROM t]' FROM dual")["permitido"] is True
+    assert (
+        canon.classificar("SELECT nq'[; DELETE FROM t]' FROM dual")["permitido"] is True
+    )

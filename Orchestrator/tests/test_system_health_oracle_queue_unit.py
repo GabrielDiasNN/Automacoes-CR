@@ -199,7 +199,9 @@ def test_collect_oracle_queue_health_use_cache_false_nao_bloqueia_leitores_em_ca
 
     resultado_bg: list[dict[str, Any]] = []
     t = threading.Thread(
-        target=lambda: resultado_bg.append(oqh.collect_oracle_queue_health(use_cache=False))
+        target=lambda: resultado_bg.append(
+            oqh.collect_oracle_queue_health(use_cache=False)
+        )
     )
     t.start()
     assert probe_iniciada.wait(timeout=2.0)

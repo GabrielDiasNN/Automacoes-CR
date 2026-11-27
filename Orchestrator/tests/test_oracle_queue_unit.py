@@ -641,9 +641,7 @@ def test_build_queue_payload_rejeita_vazio_ttl_invalido_e_diretiva_no_sql() -> N
 
 def test_convert_rows_converte_overflow_em_oracle_queue_error() -> None:
     with pytest.raises(OracleQueueError, match="malformada") as exc:
-        acessar_privado(oracle_queue, "_convert_rows")(
-            ["datetime"], [["999999999999"]]
-        )
+        acessar_privado(oracle_queue, "_convert_rows")(["datetime"], [["999999999999"]])
     assert exc.value.kind == "worker"
     assert not isinstance(exc.value, OracleQueueTransientError)
 

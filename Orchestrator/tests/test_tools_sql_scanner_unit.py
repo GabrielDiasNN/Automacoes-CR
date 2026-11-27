@@ -253,8 +253,9 @@ def test_permitir_funcoes_nao_libera_mutacao() -> None:
 
 def test_oracle_catalog_bloqueia_acima_do_limite_de_nomes() -> None:
     colunas = ", ".join(f"C{i}" for i in range(501))
+    sql_texto = " ".join(["SELECT", colunas, "FROM DUAL"])
     with pytest.raises(oc.GuardError, match="aceita até 500"):
-        _priv(oc, "_preparar_para_execucao")(f"SELECT {colunas} FROM DUAL")
+        _priv(oc, "_preparar_para_execucao")(sql_texto)
 
 
 def test_oracle_catalog_carrega_canonico_uma_vez_por_preparacao(

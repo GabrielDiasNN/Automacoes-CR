@@ -79,7 +79,9 @@ def _make_unique_names(raw_names: list[str]) -> tuple[list[str], dict[str, list[
     for index, name in enumerate(raw_names, start=1):
         positions.setdefault(name, []).append(index)
         count = seen.get(name, 0) + 1
-        candidate = name if count == 1 and name not in used else f"{name}__{max(count, 2)}"
+        candidate = (
+            name if count == 1 and name not in used else f"{name}__{max(count, 2)}"
+        )
         while candidate in used:
             count += 1
             candidate = f"{name}__{count}"
