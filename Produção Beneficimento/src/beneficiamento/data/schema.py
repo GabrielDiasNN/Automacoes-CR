@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 from ..settings import DOMAIN_ROOT
 
@@ -123,37 +126,68 @@ def apply_pragmas(conn: sqlite3.Connection) -> None:
     conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS};")
 
 
+def _schema_state(conn: sqlite3.Connection) -> tuple[bool, int]:
+    current_version = int(conn.execute("PRAGMA user_version;").fetchone()[0] or 0)
+    table_exists = (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;",
+            (TABLE_NAME,),
+        ).fetchone()
+        is not None
+    )
+    return table_exists, current_version
+
+
 def init_db(db_path: Path | str | None = None) -> Path:
     """Garante o schema tipado e os indices; idempotente e versionado."""
     path = resolve_db_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    with sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS) as conn:
+    with contextlib.closing(
+        sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS)
+    ) as conn:
         apply_pragmas(conn)
-        current_version = int(conn.execute("PRAGMA user_version;").fetchone()[0] or 0)
-        table_exists = (
-            conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;",
-                (TABLE_NAME,),
-            ).fetchone()
-            is not None
-        )
+        table_exists, current_version = _schema_state(conn)
         if table_exists and current_version >= HISTORICO_SCHEMA_VERSION:
-            for index_sql in INDEXES:
-                conn.execute(index_sql)
-            conn.commit()
             return path
 
-        # O schema v2 troca o blob como fonte de consulta por colunas tipadas.
-        # Bases antigas devem ser recarregadas pelo runner, evitando backfill
-        # parcial e mantendo a migração determinística.
-        if table_exists and current_version < HISTORICO_SCHEMA_VERSION:
-            conn.execute(f"DROP TABLE {TABLE_NAME};")
+        conn.execute("BEGIN IMMEDIATE;")
+        try:
+            table_exists, current_version = _schema_state(conn)
+            if table_exists and current_version >= HISTORICO_SCHEMA_VERSION:
+                conn.rollback()
+                return path
 
-        conn.execute(_create_table_sql())
-        for index_sql in INDEXES:
-            conn.execute(index_sql)
-        conn.execute(f"PRAGMA user_version = {HISTORICO_SCHEMA_VERSION};")
-        conn.commit()
+            # O schema v2 troca o blob como fonte de consulta por colunas tipadas.
+            # Bases antigas devem ser recarregadas pelo runner, evitando backfill
+            # parcial e mantendo a migração determinística.
+            if table_exists and current_version < HISTORICO_SCHEMA_VERSION:
+                conn.execute(f"DROP TABLE {TABLE_NAME};")
+
+            conn.execute(_create_table_sql())
+            for index_sql in INDEXES:
+                conn.execute(index_sql)
+            conn.execute(f"PRAGMA user_version = {HISTORICO_SCHEMA_VERSION};")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     return path
+
+
+@contextlib.contextmanager
+def open_historico_connection(
+    db_path: Path | str | None = None,
+    *,
+    row_factory: Any = sqlite3.Row,
+) -> Iterator[sqlite3.Connection]:
+    """Garante schema atualizado e abre conexao SQLite com pragmas e fechamento explicito."""
+    path = init_db(db_path)
+    with contextlib.closing(
+        sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS)
+    ) as conn:
+        apply_pragmas(conn)
+        if row_factory is not None:
+            conn.row_factory = row_factory
+        yield conn

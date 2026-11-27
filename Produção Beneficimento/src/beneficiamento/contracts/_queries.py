@@ -19,6 +19,7 @@ from ._queries_common import (
     _resolve_overview_window,
 )
 from ._queries_detail import (
+    _build_detail_summary,
     _build_trace,
     _detail_raw_records,
     _detail_row_to_record,
@@ -38,6 +39,7 @@ from ._queries_overview import (
 __all__ = [
     "_DETAIL_SELECT",
     "_DETAIL_TYPED",
+    "_build_detail_summary",
     "_build_fases_criticas",
     "_build_filtered_dataset",
     "_build_filtered_where",

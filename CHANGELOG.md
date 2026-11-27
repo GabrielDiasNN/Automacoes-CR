@@ -2,6 +2,33 @@
 
 > **Versões até `[1.3.69]` (03/09/2026) e anteriores estão em [`docs/historico/CHANGELOG.md`](docs/historico/CHANGELOG.md)** — arquivo grande: busque a versão ou o termo (`Grep`) em vez de carregá-lo. Referências como "`CHANGELOG.md` [1.3.57]" em docs e testes apontam para lá.
 
+## [1.3.131] - 27/11/2026
+
+Correções integradas da revisão da infraestrutura Oracle (`lib/vendor/oracle-sql-guard`, `lib/python`, `Tools/oracle`, `Tools/Test-SqlPerformance.ps1`, `Orchestrator`, `Produção Beneficimento`) e atualizações de documentação/skills Oracle e da consulta promovida `CP-10`.
+
+### Corrigido
+
+- **Guard SQL e ferramentas Oracle (`lib/vendor/oracle-sql-guard/guard_sql.py`, `Tools/oracle/`, `Tools/Test-SqlPerformance.ps1`):**
+  - Removido `QID` de `PALAVRAS_ANTES_DE_PARENTESE` (tratamento de CTEs `QID (...)` via `normalizar_cte_qid` após comentários), preservada a caixa original de identificadores entre aspas em `consulta_verificacao`, bloqueado `=>`/`FILTER_PREDS` em `DBMS_XPLAN.DISPLAY*` e restrito o prefixo `q'...'`/`nq'...'` a `inicio_token`; no wrapper `Tools/oracle/guard_sql.py`, `normalize_cte_column_lists` passou a rodar após `remover_literais_e_comentarios`.
+  - Centralizado `LIMITE_NOMES_VERIFICADOS = 500` em `Tools/oracle/guard_sql.py` com falha fechada nos CLIs (`mcp_server.py`, `validar_sql_oracle.py`, `oracle_catalog.py`); adicionado suporte ao payload `oracle-sql-validation/v2` em `decidir_revisao_sql.py`; corrigidos `mcp_server.py` (operações de pool/ping fora de `self._lock`, chamada a `lob.size()` quando `callable`, fechamento seguro de cursores), `medir_sql_oracle.py` (`OracleQueueTransientError` como `"transient"`, `EXPLAIN PLAN` nativo sem binds com `rollback()`, retry em `verificar_funcoes_no_oracle`), `validar_sql_oracle.py` (`OracleQueueBlockedError`), `oracle_catalog.py` (retry em fila e fechamento de cursores/SQLite), `build_oracle_catalog.py`, `auditar_acervo_sql.py` e `Install-InstantClient19c.ps1` (`-LiteralPath` e ACL antes da cópia do `.env`).
+  - Endurecido `Tools/Test-SqlPerformance.ps1` para remover comentários/literais antes de detectar `SELECT *` (incluindo `DISTINCT`/`ALL`/`UNIQUE` e `alias.*`), validar `$LASTEXITCODE` de `git ls-files`, aceitar caminhos absolutos em `-Paths` e falhar em caminho explícito inexistente.
+  - Integrados `black --check`, `isort --check-only`, `ruff check` e `bandit -ll` sobre os `.py` do diff em `Tools/Test-PythonGovernance.ps1` (com escopo alinhado ao job `Lint Python` do CI) para bloquear localmente falhas que antes só apareciam após o push.
+- **Cliente, sessão, fila Oracle e motor de Consultas Promovidas (`lib/python/`):**
+  - Protegida a transição Thin→Thick e `_ESTADO["thin_consolidado"]` com `threading.RLock` e truncamento UTF-8 seguro em `oracle_client.py`; verificados `not timer.is_alive()` antes de `ping()` em `cancel_after` e execução de `target_connection.cancel()` fora de `lock` com prazo limitado em `oracle_session.py`; movido `instrument_oracle_session` para dentro de `with connection:` e mapeado `TypeError` para exit `5` em `oracle_extract.py`; respeitadas aspas ao remover `#` em `parse_env_line` e incluído `ORACLE_CLIENT_LIB_DIR` em `find_tnsnames` (`hub_runner.py`).
+  - Endurecido `oracle_queue.py`: rejeição de `body_sql` vazio e de linhas `--#` além de clamping `[1, 900]` de `ttl_seconds` em `build_queue_payload`; propagação de `OracleQueueTransientError("smb", ...)` após falha SMB no `_poll`; proteção por item em `_sweep_orphans`, validação `Decimal.is_finite()` / `(ValueError, OverflowError)` e padronização das 13 chaves em `collect_worker_health_snapshot`.
+  - Corrigidos `lib/python/promovidas/run_promocao.py` (persistência atômica de `proximo_estado` mesmo sem exceções/pendentes e `hr.finish` em `LockTimeoutError`), `snapshot.py` (`contextlib.closing`) e `regras.py` (`math.isfinite` e comparação numérica em `eq`/`ne`/`in`/`not_in`).
+- **Orquestrador e Saúde da Fila (`Orchestrator/worker.py`, `Orchestrator/app/`):**
+  - Corrigida corrida no shutdown gracioso em `worker.py` (sinalização de `shutdown_event` e espera de `futures_wait(..., SHUTDOWN_GRACE_SECONDS)` antes de `_terminate_active_processes()`), removida `ORACLE_QUEUE_DEADLINE_EPOCH` de `ALLOWED_ENV_KEYS` em `subprocess_env.py`, movida a sonda de `oracle_queue_health.py` para fora de `_lock` com TTL curto degradado e alinhado o contrato das 13 chaves com `collect_worker_health_snapshot`.
+  - Alinhados `/health/full`, `/diagnostics` e `/baseline` para fila Oracle degradada/offline (`system_diagnostics.py`, `diagnostic_checks.py`, `system_runtime.py`), removendo IPs hardcoded de `action_hint` e o fallback indevido `ACTION_CODE_WORKER_WAKEUP`, com novos testes unitários em `Orchestrator/tests/`.
+- **Produção Beneficimento (`Produção Beneficimento/`):**
+  - Projetados explicitamente `OBF.SEQ AS SEQ` e `OBF.OPERADOR_FINAL AS OPERADOR_FINAL` no `SELECT` final de `sql/templates/bnf_producao_beneficiamento_detalhado.sql`, eliminando colisão de PK em `fato_producao_historica`.
+  - Corrigidos `_readonly_credentials()` (`load_dotenv(..., override=False)`), propagação de timeout e classificação de saúde em modo `queue` (`oracle.py`, `runner.py`, `snapshot_period_health.py`, `snapshot_aggregator.py`), agrupamento de `_QUALITY_BLOCKED_CODES`, estado `no_data` alcançável (`quality.py`), agregação de `summary` no recorte completo em `contracts/detail.py`, guards/transação `BEGIN IMMEDIATE` em `data/schema.py` com fechamento seguro nas leituras, preservação de `None` em `analytics.py`, `_make_unique_names`, `generated_at` em UTC e remoção de `numeric_values` morto em `profile.py`.
+
+### Alterado
+
+- **Documentação técnica e skills Oracle (`.github/skills/oracle-schema-navigator/SKILL.md`, `.github/skills/oracle-sql-patterns/references/ctes-canonicas.md`, `docs/oracle-schema/consultas/REGRAS_NEGOCIO.md`):** adicionados mapeamento de testes laboratoriais/qualidade por fase (`LAB_SOLIC`, `LAB_SOLIC_LAUDOS`, enums `150`, `151`, `351`, `480`, `635`) como seção `-- 15.` no `SKILL.md`, travessia descendente de reprocesso (`GERAPECADESTINOOB -> GERAPECAORIGEMOB`) e regras de divisões pré-acabamento e qualidade na fase `160`.
+- **Renotificação da `CP-10` (`Consultas Promovidas/quimicos-atributo-4/promocao.json`, `README.md`, `CONTEXT.md`):** reduzido `renotificar_apos_horas` de `4h` para `1h` enquanto houver saldo líquido positivo (`QUANTIDADE > 0`).
+
 ## [1.3.130] - 24/11/2026
 
 Correção da consulta da automação **Químicos Atributo 4** (`CP-10`) após falha `ORA-00904` no Oracle.

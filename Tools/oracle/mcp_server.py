@@ -132,7 +132,11 @@ JANELA_FALHA_CONEXAO_SEGUNDOS = 30.0
 LIMITE_CLOB_CARACTERES = 4000
 # O guard só confere até este número de nomes na consulta de verificação de funções.
 # Acima dele não há como provar a ausência de função: a consulta é bloqueada.
-LIMITE_NOMES_VERIFICADOS = 500
+LIMITE_NOMES_VERIFICADOS: int = (
+    int(getattr(_guard_sql, "LIMITE_NOMES_VERIFICADOS", 500))
+    if _guard_sql is not None
+    else 500
+)
 FORMATOS_EXECUCAO = ("table", "json")
 # Falhas do driver e da rede: oracledb.Error (ORA-, DPY-, DPI-) e OSError (inclui
 # ConnectionError e quedas de socket). Usado em pool e limpeza, onde só isso importa.
@@ -355,11 +359,23 @@ class _Diagnostico:
     rtt_ms: float
 
 
+def _tamanho_blob(lob: Any) -> int | None:
+    """Obtém o tamanho de um BLOB (`lob.size()` no driver ou `int` em dublês)."""
+    tamanho_attr = getattr(lob, "size", None)
+    if callable(tamanho_attr):
+        try:
+            tamanho = tamanho_attr()
+        except ERROS_DRIVER:
+            return None
+        return tamanho if _eh_inteiro(tamanho) else None
+    return tamanho_attr if _eh_inteiro(tamanho_attr) else None
+
+
 def _normalizar_lob(lob: Any, tipo: Any) -> str:
     """Converte um LOB sem carregá-lo inteiro: BLOB vira marcador, CLOB é lido com teto."""
     if tipo == oracledb.DB_TYPE_BLOB:
-        tamanho = getattr(lob, "size", None)
-        return f"<blob {tamanho} bytes>" if isinstance(tamanho, int) else "<blob>"
+        tamanho = _tamanho_blob(lob)
+        return f"<blob {tamanho} bytes>" if tamanho is not None else "<blob>"
     bruto = lob.read(1, LIMITE_CLOB_CARACTERES + 1)
     if isinstance(bruto, (bytes, bytearray)):  # tipo desconhecido e conteúdo binário
         return "<blob>"
@@ -614,82 +630,110 @@ class OracleConnectionManager:
             self._init_pool_if_needed()
             return self._pool
 
-    def acquire_connection(self) -> Any:
-        """Adquire uma conexão viva do SessionPool ou da conexão dedicada (fallback)."""
+    def _ping_dedicada(self, conn: Any) -> bool:
+        try:
+            with call_deadline(conn, PRAZO_PING_SEGUNDOS, threading.Event()):
+                conn.ping()
+            return True
+        except ERROS_DRIVER as exc:
+            log_stderr(f"Sessão dedicada inválida ({exc}); reconectando...")
+            with contextlib.suppress(*ERROS_DRIVER):
+                conn.close()
+            return False
+
+    def _verificar_janela_falha(self) -> None:
+        if self._falha_conexao is None:
+            return
+        instante, motivo = self._falha_conexao
+        if time.monotonic() - instante < JANELA_FALHA_CONEXAO_SEGUNDOS:
+            raise ConnectionError(
+                "Conexão Oracle recusada por "
+                f"{JANELA_FALHA_CONEXAO_SEGUNDOS:g} s após falha anterior: {motivo}"
+            )
+        self._falha_conexao = None
+
+    def _adquirir_dedicada(self) -> Any:
         with self._lock:
-            if not self.config.user or not self.config.password:
-                raise ValueError(
-                    "Credenciais Oracle ausentes no ambiente (.env). "
-                    "Configure ORACLE_READONLY_USER e ORACLE_READONLY_PASSWORD."
-                )
-
-            self._init_pool_if_needed()
-
-            # 1. Tenta adquirir do SessionPool
-            if self._pool is not None:
-                try:
-                    return self._pool.acquire()
-                except ERROS_DRIVER as exc:
-                    log_stderr(
-                        f"Falha ao adquirir do SessionPool ({exc}); tentando fallback dedicado..."
-                    )
-
-            # 2. Fallback para conexão dedicada avulsa com ping watchdog
-            if self._conn is not None:
-                try:
-                    with call_deadline(
-                        self._conn, PRAZO_PING_SEGUNDOS, threading.Event()
-                    ):
-                        self._conn.ping()
-                    return self._conn
-                except ERROS_DRIVER as exc:
-                    log_stderr(f"Sessão dedicada inválida ({exc}); reconectando...")
-                    with contextlib.suppress(*ERROS_DRIVER):
-                        self._conn.close()
+            dedicada = self._conn
+        if dedicada is not None:
+            if self._ping_dedicada(dedicada):
+                return dedicada
+            with self._lock:
+                if self._conn is dedicada:
                     self._conn = None
 
-            # Após uma falha recente, recusa sem tentar: cada tentativa custaria o prazo
-            # de conexão inteiro, e durante uma queda isso travaria cada chamada.
-            if self._falha_conexao is not None:
-                instante, motivo = self._falha_conexao
-                if time.monotonic() - instante < JANELA_FALHA_CONEXAO_SEGUNDOS:
-                    raise ConnectionError(
-                        "Conexão Oracle recusada por "
-                        f"{JANELA_FALHA_CONEXAO_SEGUNDOS:g} s após falha anterior: {motivo}"
-                    )
-                self._falha_conexao = None
+        with self._lock:
+            if self._conn is not None:
+                return self._conn
+            self._verificar_janela_falha()
 
-            log_stderr(
-                f"Conectando ao Oracle Unifique via conexão avulsa (DSN: {self.config.dsn})..."
+        log_stderr(
+            f"Conectando ao Oracle Unifique via conexão avulsa (DSN: {self.config.dsn})..."
+        )
+
+        def _do_connect() -> Any:
+            return connect_adaptive(
+                user=self.config.user,
+                password=self.config.password,
+                dsn=self.config.dsn,
+                client_lib=self.config.client_lib,
+                tns_admin=self.config.tns_admin,
+                log_fn=log_driver,
             )
 
-            def _do_connect() -> Any:
-                return connect_adaptive(
-                    user=self.config.user,
-                    password=self.config.password,
-                    dsn=self.config.dsn,
-                    client_lib=self.config.client_lib,
-                    tns_admin=self.config.tns_admin,
-                    log_fn=log_driver,
+        try:
+            nova = connect_within(_do_connect, seconds=15.0)
+        except Exception as exc:
+            with self._lock:
+                self._falha_conexao = (time.monotonic(), str(exc))
+            raise
+
+        with self._lock:
+            if self._conn is not None:
+                existente = self._conn
+                with contextlib.suppress(*ERROS_DRIVER):
+                    nova.close()
+                return existente
+            self._conn = nova
+            self._falha_conexao = None
+        log_stderr("Conexão avulsa estabelecida com sucesso.")
+        return nova
+
+    def acquire_connection(self) -> Any:
+        """Adquire uma conexão viva do SessionPool ou da conexão dedicada (fallback)."""
+        if not self.config.user or not self.config.password:
+            raise ValueError(
+                "Credenciais Oracle ausentes no ambiente (.env). "
+                "Configure ORACLE_READONLY_USER e ORACLE_READONLY_PASSWORD."
+            )
+
+        with self._lock:
+            self._init_pool_if_needed()
+            pool = self._pool
+
+        # 1. Tenta adquirir do SessionPool fora do lock (POOL_GETMODE_WAIT não pode bloquear release).
+        if pool is not None:
+            try:
+                return pool.acquire()
+            except ERROS_DRIVER as exc:
+                log_stderr(
+                    f"Falha ao adquirir do SessionPool ({exc}); tentando fallback dedicado..."
                 )
 
-            try:
-                self._conn = connect_within(_do_connect, seconds=15.0)
-            except Exception as exc:
-                self._falha_conexao = (time.monotonic(), str(exc))
-                raise
-            self._falha_conexao = None
-            log_stderr("Conexão avulsa estabelecida com sucesso.")
-            return self._conn
+        # 2. Fallback para conexão dedicada avulsa fora do lock durante ping/conexão.
+        return self._adquirir_dedicada()
 
     def release_connection(self, conn: Any) -> None:
         """Devolve a conexão ao SessionPool ou preserva conexão dedicada."""
         if conn is None:
             return
         with self._lock:
-            if self._pool is not None:
-                with contextlib.suppress(*ERROS_DRIVER):
-                    self._pool.release(conn)
+            if conn is self._conn:
+                return
+            pool = self._pool
+        if pool is not None:
+            with contextlib.suppress(*ERROS_DRIVER):
+                pool.release(conn)
 
     def get_connection(self) -> Any:
         """Método de compatibilidade para clientes que solicitam conexão."""
@@ -730,14 +774,17 @@ class OracleConnectionManager:
                 return
             if alvo is self._conn:
                 self._conn = None
-            elif self._pool is not None:
-                try:
-                    self._pool.drop(alvo)
-                    return
-                except ERROS_DRIVER as exc:
-                    log_stderr(f"pool.drop falhou ({exc}); fechando a conexão.")
-            with contextlib.suppress(*ERROS_DRIVER):
-                alvo.close()
+                pool = None
+            else:
+                pool = self._pool
+        if pool is not None:
+            try:
+                pool.drop(alvo)
+                return
+            except ERROS_DRIVER as exc:
+                log_stderr(f"pool.drop falhou ({exc}); fechando a conexão.")
+        with contextlib.suppress(*ERROS_DRIVER):
+            alvo.close()
 
     def close(self) -> None:
         """Encerra o SessionPool e a conexão avulsa (no encerramento do servidor)."""
@@ -949,7 +996,10 @@ class OracleMcpTools:
             return {"error": True, "message": f"Erro na fila SMB Oracle: {exc}"}
         except TypeError as exc:
             # Param list/dict levantado por oracle_queue._encode_param
-            return {"error": True, "message": f"Parâmetro inválido para a fila Oracle: {exc}"}
+            return {
+                "error": True,
+                "message": f"Parâmetro inválido para a fila Oracle: {exc}",
+            }
 
     def _executar_pedido(self, conn: Any, pedido: _PedidoSql) -> dict[str, Any]:
         """Roda o pedido no cursor da conexão, dentro do prazo, e encerra o uso da conexão."""
@@ -1149,18 +1199,22 @@ class OracleMcpTools:
         estouro do rollback também descarta (limpeza best effort).
         """
         descartar = falha is not None and (fired.is_set() or is_session_drop(falha))
-        if not descartar:
-            try:
-                with call_deadline(conn, PRAZO_ROLLBACK_SEGUNDOS, threading.Event()):
-                    conn.rollback()
-            except ERROS_DRIVER:
-                descartar = True
-            except Exception:
-                # Fora de ERROS_DRIVER: descarta a conexão antes de a falha seguir.
-                self.conn_mgr.discard_connection(conn)
-                raise
-        with contextlib.suppress(*ERROS_DRIVER):
-            cursor.close()
+        try:
+            if not descartar:
+                try:
+                    with call_deadline(
+                        conn, PRAZO_ROLLBACK_SEGUNDOS, threading.Event()
+                    ):
+                        conn.rollback()
+                except ERROS_DRIVER:
+                    descartar = True
+                except Exception:
+                    # Fora de ERROS_DRIVER: descarta a conexão antes de a falha seguir.
+                    self.conn_mgr.discard_connection(conn)
+                    raise
+        finally:
+            with contextlib.suppress(*ERROS_DRIVER):
+                cursor.close()
         if descartar:
             self.conn_mgr.discard_connection(conn)
         else:

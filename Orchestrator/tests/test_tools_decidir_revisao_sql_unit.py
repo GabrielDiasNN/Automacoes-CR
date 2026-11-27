@@ -96,3 +96,39 @@ def test_ponto_e_virgula_real_conta() -> None:
 
 def test_literal_sem_fechamento_conta_como_invalido() -> None:
     assert dr.sem_ponto_e_virgula("select 'abc from dual") is False
+
+
+@pytest.mark.parametrize(
+    ("status_v2", "esperado"),
+    [
+        ("validated", "manter_wt"),
+        ("oracle_error", "reverter_head"),
+        ("blocked_guard", "reverter_head"),
+    ],
+)
+def test_suporta_payload_validacao_v2(
+    tmp_path: Path, status_v2: str, esperado: str
+) -> None:
+    prefixo, sql_wt = _unidade(tmp_path)
+    Path(f"{prefixo}-validar-wt.json").write_text(
+        json.dumps(
+            {
+                "schema": "oracle-sql-validation/v2",
+                "summary": {status_v2: 1},
+                "results": [{"file": "wt.sql", "status": status_v2}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert dr.decidir(prefixo, sql_wt, tem_wt_diferente=True)["acao"] == esperado
+
+
+def test_payload_v2_sem_results_reverte(tmp_path: Path) -> None:
+    prefixo, sql_wt = _unidade(tmp_path)
+    Path(f"{prefixo}-validar-wt.json").write_text(
+        json.dumps(
+            {"schema": "oracle-sql-validation/v2", "summary": {}, "results": []}
+        ),
+        encoding="utf-8",
+    )
+    assert dr.decidir(prefixo, sql_wt, tem_wt_diferente=True)["acao"] == "reverter_head"

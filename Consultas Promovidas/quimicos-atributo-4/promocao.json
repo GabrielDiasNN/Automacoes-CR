@@ -40,7 +40,7 @@
         "valor": 0
       }
     ],
-    "renotificar_apos_horas": 4,
+    "renotificar_apos_horas": 1,
     "colunas_card": [
       "NF",
       "DEPOSITO",

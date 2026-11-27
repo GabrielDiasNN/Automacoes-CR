@@ -8,16 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from ..core import round_or_zero, safe_strip
-from ..data.schema import TABLE_NAME, init_db
+from ..data.schema import TABLE_NAME, open_historico_connection
 from ._queries import (
     _DETAIL_SELECT,
+    _build_detail_summary,
     _build_filtered_where,
     _build_trace,
     _detail_raw_records,
     _detail_row_to_record,
     _normalize_request_filters,
     _resolve_overview_window,
-    _summary_from_records,
 )
 
 # Alvos de coluna unica: target_type -> (coluna SQL, campo normalizado, rotulo padrao).
@@ -58,14 +58,12 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
     filtros: dict[str, Any], db_path: Path | str | None = None
 ) -> dict[str, Any]:
     """Retorna o drill-down operacional paginado para clique na UI."""
-    path = init_db(db_path)
     limit = max(1, min(int(filtros.get("limit") or 50), 200))
     page = max(1, int(filtros.get("page") or 1))
     target_type = safe_strip(filtros.get("target_type")) or "produto"
     include_raw = str(filtros.get("include_raw") or "").lower() == "true"
 
-    with sqlite3.connect(path) as conn:
-        conn.row_factory = sqlite3.Row
+    with open_historico_connection(db_path, row_factory=sqlite3.Row) as conn:
         cursor = conn.cursor()
         dt_inicio, dt_fim, _ = _resolve_overview_window(cursor, filtros)
         where_sql, params = _build_filtered_where(filtros, dt_inicio, dt_fim)
@@ -75,13 +73,10 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
         where_sql = f"{where_sql} AND {target_sql}"
         params.extend(target_params)
 
-        total = int(
-            cursor.execute(
-                f"SELECT COUNT(*) AS total FROM {TABLE_NAME} WHERE {where_sql}",  # nosec B608
-                params,
-            ).fetchone()["total"]
-            or 0
+        summary = _build_detail_summary(
+            cursor, target_type, TABLE_NAME, where_sql, params
         )
+        total = int(summary["fases_concluidas"])
         raw_select = ", DADOS_COMPLETOS" if include_raw else ""
         rows = cursor.execute(
             f"""
@@ -129,7 +124,7 @@ def obter_detail_historico(  # pylint: disable=too-many-locals
         "generated_at": datetime.now(UTC).isoformat(),
         "filters": {"effective": dict(filtros, dt_inicio=dt_inicio, dt_fim=dt_fim)},
         "target": {"type": target_type, "label": target_label},
-        "summary": _summary_from_records(target_type, records),
+        "summary": summary,
         "records": curated,
         "trace": _build_trace(records),
         "pagination": {

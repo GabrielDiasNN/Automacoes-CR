@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from .core import (
@@ -13,10 +14,20 @@ from .core import (
 )
 
 
-def first_available_float(record: dict[str, Any], fields: tuple[str, ...]) -> float:
-    """Primeiro campo presente convertido para float (0.0 se nenhum)."""
-    valor: float = to_float(first_present(record, fields))
-    return valor
+def first_available_float_or_none(
+    record: dict[str, Any], fields: tuple[str, ...]
+) -> float | None:
+    """Primeiro campo presente convertido para float (None se ausente ou inválido)."""
+    raw = first_present(record, fields)
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, str) and not raw.strip():
+        return None
+    try:
+        parsed = float(str(raw).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def attach_share_pct(items: list[dict[str, Any]], total_kg: float) -> None:
@@ -60,10 +71,10 @@ def aggregate_group(
         group["min_real_total"] += to_float(record.get("MIN_REAL"))
         group["carga_prev_grupo_total"] += to_float(record.get("CARGA_PREV_GRUPO"))
         group["rendimento_values"].append(
-            first_available_float(record, ("RENDIMENTO_MEDIO", "RENDIMENTO"))
+            first_available_float_or_none(record, ("RENDIMENTO_MEDIO", "RENDIMENTO"))
         )
         group["efic_values"].append(
-            first_available_float(
+            first_available_float_or_none(
                 record, ("EFIC_CARGA_MEDIA", "EFIC_CARGA", "EFIC_PROC_LINHA")
             )
         )
@@ -164,11 +175,11 @@ def build_analytics(records: list[dict[str, Any]]) -> dict[str, Any]:
     total_min_prev = sum(to_float(record.get("MIN_PREV")) for record in records)
     total_min_real = sum(to_float(record.get("MIN_REAL")) for record in records)
     rendimento_values = [
-        first_available_float(record, ("RENDIMENTO_MEDIO", "RENDIMENTO"))
+        first_available_float_or_none(record, ("RENDIMENTO_MEDIO", "RENDIMENTO"))
         for record in records
     ]
     efic_values = [
-        first_available_float(
+        first_available_float_or_none(
             record, ("EFIC_CARGA_MEDIA", "EFIC_CARGA", "EFIC_PROC_LINHA")
         )
         for record in records

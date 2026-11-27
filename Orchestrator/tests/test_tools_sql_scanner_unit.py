@@ -1,7 +1,10 @@
 """Testes unitarios do scanner SQL compartilhado por oracle_catalog e validar_sql_oracle."""
 
+import argparse
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -9,6 +12,7 @@ from carregadores_modulos import (
     acessar_privado as _priv,
     carregar_tool_oracle as _carregar,
 )
+from oracle_queue import OracleQueueTransientError, QueueResult
 
 oc = _carregar("oracle_catalog")
 vs = _carregar("validar_sql_oracle")
@@ -245,3 +249,134 @@ def test_comandos_que_executam_continuam_bloqueando_funcao() -> None:
 def test_permitir_funcoes_nao_libera_mutacao() -> None:
     with pytest.raises(oc.GuardError):
         _ensure_select_only("SELECT 1 FROM DUAL FOR UPDATE", permitir_funcoes=True)
+
+
+def test_oracle_catalog_bloqueia_acima_do_limite_de_nomes() -> None:
+    colunas = ", ".join(f"C{i}" for i in range(501))
+    sql_texto = " ".join(["SELECT", colunas, "FROM DUAL"])
+    with pytest.raises(oc.GuardError, match="aceita até 500"):
+        _priv(oc, "_preparar_para_execucao")(sql_texto)
+
+
+def test_oracle_catalog_carrega_canonico_uma_vez_por_preparacao(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cargas: list[int] = []
+    classificacoes: list[int] = []
+
+    class _Guarda:
+        LIMITE_NOMES_VERIFICADOS = 500
+
+        @staticmethod
+        def load_canonical() -> object:
+            cargas.append(1)
+            return object()
+
+        @staticmethod
+        def patch_canonical(_c: Any) -> Any:
+            def _classificar(_sql: str, **_k: Any) -> dict[str, Any]:
+                classificacoes.append(1)
+                return {
+                    "permitido": True,
+                    "classe": "leitura",
+                    "consulta_verificacao": "SELECT v",
+                }
+
+            return SimpleNamespace(classificar=_classificar)
+
+        @staticmethod
+        def extrair_consulta_verificacao(v: dict[str, Any]) -> str | None:
+            return str(v.get("consulta_verificacao"))
+
+    _priv(oc, "_cache_canonico").clear()
+    monkeypatch.setattr(oc, "_carregar_guard", lambda: _Guarda)
+    sql, consulta = _priv(oc, "_preparar_para_execucao")("SELECT 1 FROM DUAL")
+    assert sql == "SELECT 1 FROM DUAL"
+    assert consulta == "SELECT v"
+    assert len(cargas) == 1
+    assert len(classificacoes) == 1
+
+    _ensure_select_only("SELECT 2 FROM DUAL")
+    assert len(cargas) == 1
+    assert len(classificacoes) == 2
+
+
+def test_oracle_catalog_queue_retenta_transitorio(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    chamadas_exec: list[int] = []
+
+    def exec_falso(*_a: Any, **_k: Any) -> QueueResult:
+        chamadas_exec.append(1)
+        if len(chamadas_exec) == 1:
+            raise OracleQueueTransientError("smb", "queda")
+        return QueueResult(columns=["X"], types=["number"], rows=[(1,)])
+
+    monkeypatch.setattr(oc, "verificar_objetos_fila", lambda *_a, **_k: None)
+    monkeypatch.setattr(oc, "executar_consulta_fila", exec_falso)
+    cols, rows = _priv(oc, "_run_catalog_queue_query")(
+        "SELECT 1 FROM DUAL", "SELECT v", "G", "Q"
+    )
+    assert cols == ["X"] and rows == [(1,)]
+    assert len(chamadas_exec) == 2
+
+    chamadas_plan: list[int] = []
+
+    def plan_falso(*_a: Any, **_k: Any) -> tuple[list[str], float]:
+        chamadas_plan.append(1)
+        if len(chamadas_plan) == 1:
+            raise OracleQueueTransientError("smb", "queda")
+        return ["PLAN"], 1.0
+
+    sql_file = tmp_path / "q.sql"
+    sql_file.write_text("SELECT 1 FROM DUAL\n", encoding="utf-8")
+    monkeypatch.setattr(oc, "_resolve_online_creds", lambda: oc.QUEUE_MODE_SENTINEL)
+    monkeypatch.setattr(oc, "explicar_plano_fila", plan_falso)
+    assert oc.cmd_check(argparse.Namespace(arquivo=str(sql_file))) == 0
+    assert len(chamadas_plan) == 2
+    chamadas_plan.clear()
+    assert oc.cmd_explain(argparse.Namespace(arquivo=str(sql_file))) == 0
+    assert len(chamadas_plan) == 2
+
+
+def test_build_oracle_catalog_deduplica_antes_de_contar_total_objects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    boc = _carregar("build_oracle_catalog")
+    db = tmp_path / "schema.db"
+    data = boc.CatalogData(
+        objects=[
+            ("T1", "TABLE", "VALID", 10, None, "Tabela"),
+            ("T1", "SYNONYM", "VALID", None, None, "Sinonimo"),
+        ],
+        columns=[],
+        constraints=[],
+        constraint_columns=[],
+        index_data=boc.IndexData([], []),
+        view_deps=[],
+        view_source=[],
+    )
+    _priv(boc, "_write_catalog")(db, "SGTPRD", data)
+    monkeypatch.setattr(oc, "CATALOG_PATH", db)
+    with contextlib.closing(_priv(oc, "_connect_catalog")()) as conn:
+        total_rows = conn.execute("SELECT COUNT(*) FROM objects").fetchone()[0]
+        meta_total = conn.execute(
+            "SELECT value FROM meta WHERE key = 'total_objects'"
+        ).fetchone()[0]
+    assert total_rows == 1
+    assert meta_total == "1"
+
+
+def test_auditar_acervo_suporta_root_externo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    aa = _carregar("auditar_acervo_sql")
+    externo = tmp_path / "fora.sql"
+    externo.write_text("SELECT 1 FROM DUAL", encoding="utf-8")
+    monkeypatch.setattr(
+        aa.subprocess,
+        "run",
+        lambda *_a, **_k: argparse.Namespace(returncode=1, stdout="", stderr="ok"),
+    )
+    registro = aa.audit_file(externo, 3, 5)
+    assert registro["file"] == externo.as_posix()

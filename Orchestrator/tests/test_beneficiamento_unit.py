@@ -1,13 +1,15 @@
 """Testes unitarios da logica isolada do dominio Beneficiamento (core/ e data/)."""
 
 import sys
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from beneficiamento.analytics import build_analytics
 from beneficiamento.contracts import (
+    obter_detail_historico,
     obter_overview_historico,
 )
 from beneficiamento.core import (
@@ -24,14 +26,20 @@ from beneficiamento.core import (
 )
 from beneficiamento.data import (
     buscar_historico,
+    descrever_schema_historico,
     explicar_busca_historico,
     salvar_historico,
 )
 from beneficiamento.data.schema import (
+    HISTORICO_SCHEMA_VERSION,
     SQLITE_BUSY_TIMEOUT_MS,
     apply_pragmas,
     init_db,
+    open_historico_connection,
 )
+from beneficiamento.oracle import QueryResult
+from beneficiamento.profile import ColumnProfile
+from beneficiamento.runner import _build_snapshot_payloads_from_result
 from beneficiamento.settings import (
     get_period_config,
 )
@@ -300,3 +308,142 @@ def test_apply_pragmas_define_busy_timeout(tmp_path: Path) -> None:
     # Garante tambem em conexao real via init_db que o PRAGMA e aceito pelo SQLite.
     db = init_db(tmp_path / "h.db")
     assert db.exists()
+
+
+def test_detail_summary_cobre_recorte_completo_nao_apenas_pagina_atual(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "detail.db"
+    salvar_historico(
+        [
+            {
+                "NUMERO_OB": "2001",
+                "SEQ": 1,
+                "DATA_FIM": "2026-06-10T08:00:00",
+                "CODIGO_ALTERNATIVO": "PROD1",
+                "QT_KG": 10.0,
+                "QT_MT": 20.0,
+                "MIN_REAL": 10.0,
+                "MIN_PREV": 8.0,
+                "TURNO_PROD": "1",
+                "TURNO_DESC": "TURNO 1",
+            },
+            {
+                "NUMERO_OB": "2002",
+                "SEQ": 1,
+                "DATA_FIM": "2026-06-10T09:00:00",
+                "CODIGO_ALTERNATIVO": "PROD1",
+                "QT_KG": 20.0,
+                "QT_MT": 40.0,
+                "MIN_REAL": 20.0,
+                "MIN_PREV": 16.0,
+                "TURNO_PROD": "2",
+                "TURNO_DESC": "TURNO 2",
+            },
+            {
+                "NUMERO_OB": "2002",
+                "SEQ": 2,
+                "DATA_FIM": "2026-06-10T10:00:00",
+                "CODIGO_ALTERNATIVO": "PROD1",
+                "QT_KG": 30.0,
+                "QT_MT": 60.0,
+                "MIN_REAL": 30.0,
+                "MIN_PREV": 36.0,
+                "REPROCESSO": 1,
+                "TURNO_PROD": "2",
+                "TURNO_DESC": "TURNO 2",
+            },
+        ],
+        db_path=db,
+    )
+
+    resp = obter_detail_historico(
+        {"target_type": "produto", "alternativo": "PROD1", "page": 1, "limit": 1},
+        db_path=db,
+    )
+
+    assert len(resp["records"]) == 1
+    assert resp["pagination"]["total"] == 3
+    assert resp["pagination"]["pages"] == 3
+    assert resp["summary"]["fases_concluidas"] == 3
+    assert resp["summary"]["ob_distintas"] == 2
+    assert resp["summary"]["kg_total"] == 60.0
+    assert resp["summary"]["mt_total"] == 120.0
+    assert resp["summary"]["reprocesso_kg_pct"] == 50.0
+    assert resp["summary"]["turnos"] == ["TURNO 1", "TURNO 2"]
+
+
+def test_init_db_pula_ddls_quando_atualizado_e_open_connection_fecha_com_pragmas(
+    tmp_path: Path,
+) -> None:
+    db = init_db(tmp_path / "schema.db")
+    with open_historico_connection(db, row_factory=None) as conn:
+        assert (
+            conn.execute("PRAGMA user_version;").fetchone()[0]
+            == HISTORICO_SCHEMA_VERSION
+        )
+        # Remove manualmente um indice para comprovar que init_db pula DDLs quando versionado.
+        conn.execute("DROP INDEX idx_producao_numero_ob;")
+        conn.commit()
+
+    init_db(db)
+    assert "idx_producao_numero_ob" not in descrever_schema_historico(db)["indexes"]
+
+    with open_historico_connection(db, row_factory=None) as conn:
+        busy = conn.execute("PRAGMA busy_timeout;").fetchone()[0]
+        assert busy == SQLITE_BUSY_TIMEOUT_MS
+    with pytest.raises(Exception, match="closed"):
+        conn.execute("SELECT 1;")
+
+
+def test_analytics_preserva_none_antes_de_average_or_none() -> None:
+    records = [
+        {
+            "NUMERO_OB": "1",
+            "NUMERO_MAQUINA": "10",
+            "NOME_MAQUINA": "JET-1",
+            "DESCR_FASE": "TINGIMENTO",
+            "TURNO_PROD": "1",
+            "TURNO_DESC": "TURNO 1",
+            "QT_KG": 100.0,
+            "RENDIMENTO": 80.0,
+            "EFIC_CARGA": 90.0,
+        },
+        {
+            "NUMERO_OB": "2",
+            "NUMERO_MAQUINA": "10",
+            "NOME_MAQUINA": "JET-1",
+            "DESCR_FASE": "TINGIMENTO",
+            "TURNO_PROD": "1",
+            "TURNO_DESC": "TURNO 1",
+            "QT_KG": 50.0,
+            "RENDIMENTO": None,
+            "EFIC_CARGA": None,
+        },
+    ]
+
+    result = build_analytics(records)
+    assert result["geral"]["rendimento_medio_ponderado"] == 80.0
+    assert result["geral"]["efic_carga_media_ponderada"] == 90.0
+    assert result["por_maquina"][0]["rendimento_medio_ponderado"] == 80.0
+    assert result["por_maquina"][0]["efic_carga_media_ponderada"] == 90.0
+
+    sem_metricas = build_analytics([{"NUMERO_OB": "3", "QT_KG": 10.0}])
+    assert sem_metricas["geral"]["rendimento_medio_ponderado"] is None
+    assert sem_metricas["geral"]["efic_carga_media_ponderada"] is None
+
+
+def test_runner_generated_at_utc_e_profile_sem_numeric_values() -> None:
+    col = ColumnProfile(name="QT_KG")
+    col.add(10.5, 3)
+    assert not hasattr(col, "numeric_values")
+
+    _, analytics, _ = _build_snapshot_payloads_from_result(
+        "diario",
+        QueryResult(
+            columns=["NUMERO_OB"], rows=[("1",)], duplicate_columns={}, metadata={}
+        ),
+        sample_limit=3,
+    )
+    generated = datetime.fromisoformat(analytics["snapshot"]["generated_at"])
+    assert generated.tzinfo == UTC

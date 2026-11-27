@@ -15,6 +15,7 @@ from carregadores_modulos import (
     acessar_privado as _priv,
     carregar_tool_oracle as _carregar,
 )
+from oracle_queue import OracleQueueTransientError, QueueResult
 
 mm = _carregar("medir_sql_oracle")
 ce = _carregar("comparar_equivalencia")
@@ -676,3 +677,169 @@ def test_excecao_funcoes_exige_evidencia_na_allowlist(tmp_path: Path) -> None:
 
 def test_allowlist_versionada_e_legivel() -> None:
     assert isinstance(_priv(mm, "_funcoes_auditadas")(mm.ALLOWLIST_FUNCOES), frozenset)
+
+
+def test_attempt_queue_classifica_transitorio_smb_e_retenta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chamadas: list[int] = []
+
+    def falso_exec(*_a: Any, **_k: Any) -> QueueResult:
+        chamadas.append(1)
+        if len(chamadas) == 1:
+            raise OracleQueueTransientError("smb", "share caiu")
+        return QueueResult(
+            columns=["A"],
+            types=["number"],
+            rows=[(1,)],
+            elapsed_ms=5,
+            raw_meta={"db_ms": 2.0},
+        )
+
+    monkeypatch.setattr(mm, "executar_consulta_fila", falso_exec)
+    res = _run_with_retry(
+        mm.QUEUE_MODE_SENTINEL, "select 1 from dual", {}, _opcoes(), False
+    )
+    assert res["status"] == "ok"
+    assert res["attempts"] == 2
+    assert len(chamadas) == 2
+
+
+@pytest.mark.parametrize(
+    ("erro", "esperado"),
+    [
+        (OSError("share offline"), "error"),
+        (ValueError("bind inválido"), "error"),
+        (TimeoutError("prazo"), "timeout"),
+    ],
+)
+def test_attempt_queue_captura_erros_fila_sem_propagar(
+    monkeypatch: pytest.MonkeyPatch, erro: BaseException, esperado: str
+) -> None:
+    def falso_exec(*_a: Any, **_k: Any) -> Any:
+        raise erro
+
+    monkeypatch.setattr(mm, "executar_consulta_fila", falso_exec)
+    res = _priv(mm, "_attempt_queue")("select 1 from dual", {}, _opcoes(), False)
+    assert res["status"] == esperado
+
+
+def test_explain_plan_executa_sem_binds_e_faz_rollback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    execucoes: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    eventos: list[str] = []
+
+    class Cursor:
+        def execute(self, *args: Any, **kwargs: Any) -> None:
+            execucoes.append((args, kwargs))
+
+        def fetchall(self) -> list[tuple[str]]:
+            return [("PLAN OK",)]
+
+        def close(self) -> None:
+            eventos.append("cursor_close")
+
+    class Conexao:
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+        def rollback(self) -> None:
+            eventos.append("rollback")
+
+        def close(self) -> None:
+            eventos.append("conn_close")
+
+    monkeypatch.setattr(mm.oracledb, "connect", lambda **_k: Conexao())
+    creds = argparse.Namespace(
+        user=None, password=None, dsn=None, client_lib=None, tns_admin=None
+    )
+    plano = mm.explain_plan(creds, "select * from dual where id = :id", {"ID": 10})
+
+    assert plano == ["PLAN OK"]
+    assert execucoes[0] == (("EXPLAIN PLAN FOR select * from dual where id = :id",), {})
+    assert "rollback" in eventos
+    assert "cursor_close" in eventos
+    assert "conn_close" in eventos
+
+
+def test_verificar_funcoes_retenta_transitorio_em_queue_e_nativo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chamadas_fila: list[int] = []
+
+    def fila_falsa(*_a: Any, **_k: Any) -> None:
+        chamadas_fila.append(1)
+        if len(chamadas_fila) == 1:
+            raise OracleQueueTransientError("smb", "oscilacao")
+
+    monkeypatch.setattr(mm, "verificar_objetos_fila", fila_falsa)
+    assert (
+        mm.verificar_funcoes_no_oracle(
+            mm.QUEUE_MODE_SENTINEL, "SELECT 1 FROM DUAL", 5.0
+        )
+        is None
+    )
+    assert len(chamadas_fila) == 2
+
+    chamadas_nativo: list[int] = []
+
+    def _fechar() -> None:
+        pass
+
+    def nativo_falso(_c: Any) -> Any:
+        chamadas_nativo.append(1)
+        if len(chamadas_nativo) == 1:
+            raise mm.oracledb.OperationalError("ORA-03113: end-of-file")
+        return argparse.Namespace(cursor=object, close=_fechar)
+
+    monkeypatch.setattr(mm, "_connect", nativo_falso)
+    monkeypatch.setattr(mm, "verificar_objetos", lambda *_a: None)
+    assert mm.verificar_funcoes_no_oracle(object(), "SELECT 1 FROM DUAL", 5.0) is None
+    assert len(chamadas_nativo) == 2
+
+
+def test_main_encerra_com_system_exit_limpo_se_verificacao_falhar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _prepare(args: Any) -> tuple[str, dict[str, Any], Any]:
+        args.consulta_verificacao = "SELECT 1 FROM DUAL"
+        return "select 1 from dual", {}, mm.QUEUE_MODE_SENTINEL
+
+    monkeypatch.setattr(mm, "_prepare", _prepare)
+    monkeypatch.setattr(
+        mm,
+        "verificar_funcoes_no_oracle",
+        lambda *_a: (_ for _ in ()).throw(OracleQueueTransientError("smb", "fora")),
+    )
+    monkeypatch.setattr(sys, "argv", ["medir", "a.sql"])
+    with pytest.raises(SystemExit, match="verificação de funções no Oracle falhou"):
+        mm.main()
+
+
+def test_medir_bloqueia_acima_do_limite_de_nomes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    colunas = ", ".join(f"C{i}" for i in range(501))
+    sql_file = tmp_path / "muitos.sql"
+    sql_texto = " ".join(["SELECT", colunas, "FROM DUAL\n"])
+    sql_file.write_text(sql_texto, encoding="utf-8")
+    monkeypatch.setattr(mm, "load_dotenv", lambda *_a, **_k: False)
+    monkeypatch.setattr(
+        mm,
+        "_guard_texto",
+        lambda *_a: (
+            0,
+            json.dumps(
+                {
+                    "classe": "leitura",
+                    "permitido": True,
+                    "verificar_objetos": [f"C{i}" for i in range(501)],
+                    "consulta_verificacao": "SELECT v",
+                }
+            ),
+        ),
+    )
+    args = argparse.Namespace(file=sql_file, aceitar_funcoes_auditadas=False, bind=[])
+    with pytest.raises(SystemExit, match="aceita até 500"):
+        _priv(mm, "_prepare")(args)

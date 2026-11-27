@@ -39,6 +39,7 @@ def _ambiente_isolado(monkeypatch: pytest.MonkeyPatch) -> None:
         "ORACLE_CONNECT_STRING",
         "ORACLE_QUEUE_DIR",
         "TNS_ADMIN",
+        "ORACLE_CLIENT_LIB_DIR",
         "ORACLE_CLIENT_PATH",
     ):
         monkeypatch.delenv(chave, raising=False)
@@ -477,3 +478,32 @@ def test_relogio_do_servidor_apaga_a_sonda_e_cai_no_local_sem_pasta(
     assert abs(agora - time.time()) < 60
     assert not list(tmp_path.glob("_clock_probe_*"))
     assert abs(hr.relogio_servidor(tmp_path / "nao-existe") - time.time()) < 60
+
+
+def test_tnsnames_do_oracle_client_lib_dir_em_network_admin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admin = tmp_path / "network" / "admin"
+    admin.mkdir(parents=True)
+    (admin / "tnsnames.ora").write_text(TNSNAMES, encoding="utf-8")
+    monkeypatch.setenv("ORACLE_CLIENT_LIB_DIR", str(tmp_path))
+
+    assert hr.find_tnsnames() == admin / "tnsnames.ora"
+    assert hr.resolve_oracle_endpoint("DBPRD") == hr.OracleEndpoint(
+        "banco.exemplo.invalid", 1600
+    )
+
+
+@pytest.mark.parametrize(
+    ("linha", "esperado"),
+    [
+        ('SENHA="abc # def"   # comentario', ("SENHA", "abc # def")),
+        ("SENHA='xyz # 123' # outro", ("SENHA", "xyz # 123")),
+        ("CHAVE=abc#def", ("CHAVE", "abc#def")),
+        ('VAZIA_ASPAS=""', None),
+    ],
+)
+def test_parse_env_line_respeita_aspas_com_hashtag(
+    linha: str, esperado: tuple[str, str] | None
+) -> None:
+    assert hr.parse_env_line(linha) == esperado

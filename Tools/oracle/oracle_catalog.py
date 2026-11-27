@@ -31,12 +31,14 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib
 import re
 import sqlite3
 import sys
 import threading
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +54,7 @@ try:
         init_thick_mode,
         resolve_oracle_credentials,
     )
+    from oracle_queue import OracleQueueTransientError
     from oracle_queue_tools import (
         ERROS_FILA,
         QUEUE_MODE_SENTINEL,
@@ -175,41 +178,41 @@ def _print_table_constraints(conn: sqlite3.Connection, table: str) -> None:
 
 
 def cmd_table(args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
     name = args.name.upper()
-    obj = conn.execute(
-        "SELECT * FROM objects WHERE object_name = ?", (name,)
-    ).fetchone()
-    if obj is None:
-        print(f"[ERRO] Objeto '{name}' nao encontrado no catalogo.")
-        return 1
+    with contextlib.closing(_connect_catalog()) as conn:
+        obj = conn.execute(
+            "SELECT * FROM objects WHERE object_name = ?", (name,)
+        ).fetchone()
+        if obj is None:
+            print(f"[ERRO] Objeto '{name}' nao encontrado no catalogo.")
+            return 1
 
-    print(f"{obj['object_name']} ({obj['object_type']}, {obj['status']})")
-    if obj["comment"]:
-        print(f"  {obj['comment']}")
-    if obj["num_rows"] is not None:
-        print(
-            f"  Linhas (estimativa do dicionario): {obj['num_rows']:,}".replace(
-                ",", "."
+        print(f"{obj['object_name']} ({obj['object_type']}, {obj['status']})")
+        if obj["comment"]:
+            print(f"  {obj['comment']}")
+        if obj["num_rows"] is not None:
+            print(
+                f"  Linhas (estimativa do dicionario): {obj['num_rows']:,}".replace(
+                    ",", "."
+                )
             )
-        )
 
-    _print_table_columns(conn, name)
-    _print_table_constraints(conn, name)
+        _print_table_columns(conn, name)
+        _print_table_constraints(conn, name)
 
-    idx = conn.execute(
-        "SELECT index_name, uniqueness FROM indexes WHERE table_name = ?", (name,)
-    ).fetchall()
-    if idx:
-        print(f"\nIndices ({len(idx)}):")
-        for i in idx:
-            cols = conn.execute(
-                "SELECT column_name FROM index_columns WHERE index_name = ? ORDER BY position",
-                (i["index_name"],),
-            ).fetchall()
-            col_list = ", ".join(c["column_name"] for c in cols)
-            unique_txt = "UNIQUE " if i["uniqueness"] == "UNIQUE" else ""
-            print(f"  {unique_txt}{i['index_name']} ({col_list})")
+        idx = conn.execute(
+            "SELECT index_name, uniqueness FROM indexes WHERE table_name = ?", (name,)
+        ).fetchall()
+        if idx:
+            print(f"\nIndices ({len(idx)}):")
+            for i in idx:
+                cols = conn.execute(
+                    "SELECT column_name FROM index_columns WHERE index_name = ? ORDER BY position",
+                    (i["index_name"],),
+                ).fetchall()
+                col_list = ", ".join(c["column_name"] for c in cols)
+                unique_txt = "UNIQUE " if i["uniqueness"] == "UNIQUE" else ""
+                print(f"  {unique_txt}{i['index_name']} ({col_list})")
 
     return 0
 
@@ -218,14 +221,14 @@ def cmd_table(args: argparse.Namespace) -> int:
 
 
 def cmd_cols(args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
     table = args.table.upper()
     pattern = f"%{args.like.upper()}%" if args.like else "%"
-    rows = conn.execute(
-        "SELECT column_name, data_type, nullable, comment FROM columns "
-        "WHERE table_name = ? AND column_name LIKE ? ORDER BY position",
-        (table, pattern),
-    ).fetchall()
+    with contextlib.closing(_connect_catalog()) as conn:
+        rows = conn.execute(
+            "SELECT column_name, data_type, nullable, comment FROM columns "
+            "WHERE table_name = ? AND column_name LIKE ? ORDER BY position",
+            (table, pattern),
+        ).fetchall()
     if not rows:
         print(
             f"[AVISO] Nenhuma coluna encontrada em {table} para o padrao '{args.like}'."
@@ -253,15 +256,15 @@ def _sanitize_fts_query(text: str) -> str:
 
 
 def cmd_find(args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
     query = _sanitize_fts_query(args.text)
     if not query:
         print("[ERRO] Termo de busca vazio apos sanitizacao.")
         return 1
-    rows = conn.execute(
-        "SELECT object_name, column_name, comment FROM search_idx WHERE search_idx MATCH ? LIMIT ?",
-        (query, args.limit),
-    ).fetchall()
+    with contextlib.closing(_connect_catalog()) as conn:
+        rows = conn.execute(
+            "SELECT object_name, column_name, comment FROM search_idx WHERE search_idx MATCH ? LIMIT ?",
+            (query, args.limit),
+        ).fetchall()
     if not rows:
         print(f"[AVISO] Nada encontrado para '{args.text}'.")
         return 1
@@ -322,33 +325,35 @@ def _bfs_path(
 
 
 def cmd_path(args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
     start, end = args.de.upper(), args.para.upper()
-    adjacency = _build_adjacency(_load_fk_edges(conn))
-    trail = _bfs_path(adjacency, start, end, args.max_depth)
-    if trail is None:
-        print(
-            f"[AVISO] Nenhum caminho de FK entre {start} e {end} em ate {args.max_depth} saltos."
-        )
-        return 1
-    if not trail:
-        print(f"{start} == {end}")
-        return 0
-    print(f"Caminho ({len(trail)} salto(s)):")
-    for src, dst, cons_name in trail:
-        cols = conn.execute(
-            "SELECT column_name FROM constraint_columns WHERE constraint_name = ? ORDER BY position",
-            (cons_name,),
-        ).fetchall()
-        col_list = ", ".join(c["column_name"] for c in cols)
-        print(f"  JOIN {dst} ON ({col_list}) -- via {cons_name} (a partir de {src})")
+    with contextlib.closing(_connect_catalog()) as conn:
+        adjacency = _build_adjacency(_load_fk_edges(conn))
+        trail = _bfs_path(adjacency, start, end, args.max_depth)
+        if trail is None:
+            print(
+                f"[AVISO] Nenhum caminho de FK entre {start} e {end} em ate {args.max_depth} saltos."
+            )
+            return 1
+        if not trail:
+            print(f"{start} == {end}")
+            return 0
+        print(f"Caminho ({len(trail)} salto(s)):")
+        for src, dst, cons_name in trail:
+            cols = conn.execute(
+                "SELECT column_name FROM constraint_columns WHERE constraint_name = ? ORDER BY position",
+                (cons_name,),
+            ).fetchall()
+            col_list = ", ".join(c["column_name"] for c in cols)
+            print(
+                f"  JOIN {dst} ON ({col_list}) -- via {cons_name} (a partir de {src})"
+            )
     return 0
 
 
 def cmd_neighbors(args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
     table = args.table.upper()
-    adjacency = _build_adjacency(_load_fk_edges(conn))
+    with contextlib.closing(_connect_catalog()) as conn:
+        adjacency = _build_adjacency(_load_fk_edges(conn))
     visited = {table: 0}
     queue: deque[tuple[str, int]] = deque([(table, 0)])
     result: list[tuple[str, int, str]] = []
@@ -376,23 +381,23 @@ def cmd_neighbors(args: argparse.Namespace) -> int:
 
 
 def cmd_view(args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
     name = args.name.upper()
-    row = conn.execute(
-        "SELECT text FROM view_source WHERE view_name = ?", (name,)
-    ).fetchone()
-    if row is None:
-        exists = conn.execute(
-            "SELECT 1 FROM objects WHERE object_name = ? AND object_type = 'VIEW'",
-            (name,),
+    with contextlib.closing(_connect_catalog()) as conn:
+        row = conn.execute(
+            "SELECT text FROM view_source WHERE view_name = ?", (name,)
         ).fetchone()
-        if exists:
-            print(
-                f"[AVISO] '{name}' e uma view, mas o catalogo foi gerado com --skip-view-source."
-            )
-        else:
-            print(f"[ERRO] View '{name}' nao encontrada no catalogo.")
-        return 1
+        if row is None:
+            exists = conn.execute(
+                "SELECT 1 FROM objects WHERE object_name = ? AND object_type = 'VIEW'",
+                (name,),
+            ).fetchone()
+            if exists:
+                print(
+                    f"[AVISO] '{name}' e uma view, mas o catalogo foi gerado com --skip-view-source."
+                )
+            else:
+                print(f"[ERRO] View '{name}' nao encontrada no catalogo.")
+            return 1
     print(row["text"])
     return 0
 
@@ -442,8 +447,10 @@ def cmd_queries(args: argparse.Namespace) -> int:
 
 
 def cmd_usage(_args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
-    known = {r["object_name"] for r in conn.execute("SELECT object_name FROM objects")}
+    with contextlib.closing(_connect_catalog()) as conn:
+        known = {
+            r["object_name"] for r in conn.execute("SELECT object_name FROM objects")
+        }
     sql_files = sorted(ROOT.glob("**/*.sql"))
     sql_files = [
         f for f in sql_files if ".venv" not in f.parts and "node_modules" not in f.parts
@@ -584,6 +591,9 @@ def sql_guard_text(sql: str) -> str:
     return _split_sql(sql)[1]
 
 
+_cache_canonico: dict[str, tuple[Any, Any]] = {}
+
+
 def _carregar_guard() -> Any:
     """Modulo do guard SQL do acervo (wrapper versionado). Ausente = fail-closed."""
     try:
@@ -595,17 +605,26 @@ def _carregar_guard() -> Any:
         ) from exc
 
 
+def _canonico_do_guard(guard: Any) -> Any:
+    entrada = _cache_canonico.get("entrada")
+    if entrada is not None and entrada[0] is guard:
+        return entrada[1]
+    canon = guard.patch_canonical(guard.load_canonical())
+    _cache_canonico["entrada"] = (guard, canon)
+    return canon
+
+
 def _validar_guard_canonico(sql: str, permitir_funcoes: bool = False) -> str | None:
     """Mesma autoridade de leitura do MCP: so passa o que o guard classifica como leitura.
 
     Pega o que a lista de palavras-chave nao pega, como chamada de funcao de pacote
     (`SGTPRD.PKG_X.FN(...)`) com efeito colateral. Levanta GuardError (fail-closed).
     Devolve a `consulta_verificacao` do guard, que quem executa o SQL precisa rodar
-    antes (`guard_sql.verificar_objetos`).
+    antes (`guard_sql.verificar_objetos`), falhando fechado acima do limite de nomes.
     """
     guard = _carregar_guard()
     try:
-        canon = guard.patch_canonical(guard.load_canonical())
+        canon = _canonico_do_guard(guard)
         classificacao = canon.classificar(sql, exigir_limite=False)
     # Qualquer falha do guard vira GuardError (fail-closed).
     except Exception as exc:
@@ -624,32 +643,16 @@ def _validar_guard_canonico(sql: str, permitir_funcoes: bool = False) -> str | N
             or "classificada como mutacao/DDL"
         )
         raise GuardError(f"Bloqueado pelo guard_sql: {motivos}")
-    consulta = classificacao.get("consulta_verificacao")
-    return str(consulta) if consulta else None
+    try:
+        consulta: str | None = guard.extrair_consulta_verificacao(classificacao)
+    except ValueError as exc:
+        raise GuardError(f"Bloqueado pelo guard_sql: {exc}") from exc
+    return consulta
 
 
-def _preparar_para_execucao(sql: str) -> tuple[str, str | None]:
-    """`_ensure_select_only` mais a `consulta_verificacao`, para quem executa o SQL."""
-    executavel = _ensure_select_only(sql)
-    return executavel, _validar_guard_canonico(executavel)
-
-
-def _sem_funcao_no_catalogo(cursor: Any, consulta: str | None) -> None:
-    """Roda a `consulta_verificacao` antes do SQL; GuardError se algum nome for função."""
-    motivo = _carregar_guard().verificar_objetos(cursor, consulta)
-    if motivo is not None:
-        raise GuardError(f"Bloqueado: {motivo}")
-
-
-def _ensure_select_only(sql: str, permitir_funcoes: bool = False) -> str:
-    """Valida `sql` e retorna a versao pronta para execucao (sem ';' final).
-
-    Duas camadas: a estrutural (um statement, SELECT/WITH, lista de palavras-chave)
-    e o guard_sql canonico, que e a autoridade de leitura. A validacao roda sobre o
-    texto de guarda de `_split_sql` (sem comentarios nem conteudo de literais). O
-    texto retornado preserva hints e literais e descarta apenas comentarios,
-    inclusive os que vem depois do `;` final, que o driver rejeitaria.
-    """
+def _validar_e_preparar(
+    sql: str, permitir_funcoes: bool = False
+) -> tuple[str, str | None]:
     executable, guard = _split_sql(sql)
     stripped = guard.strip().rstrip(";").strip()
     if not stripped:
@@ -671,8 +674,31 @@ def _ensure_select_only(sql: str, permitir_funcoes: bool = False) -> str:
     if forbidden:
         raise GuardError(f"Palavra-chave nao permitida: {forbidden.group(0).upper()}.")
     executavel = executable.strip().rstrip(";").rstrip()
-    _validar_guard_canonico(executavel, permitir_funcoes)
-    return executavel
+    return executavel, _validar_guard_canonico(executavel, permitir_funcoes)
+
+
+def _preparar_para_execucao(sql: str) -> tuple[str, str | None]:
+    """`_ensure_select_only` mais a `consulta_verificacao`, para quem executa o SQL."""
+    return _validar_e_preparar(sql, permitir_funcoes=False)
+
+
+def _sem_funcao_no_catalogo(cursor: Any, consulta: str | None) -> None:
+    """Roda a `consulta_verificacao` antes do SQL; GuardError se algum nome for função."""
+    motivo = _carregar_guard().verificar_objetos(cursor, consulta)
+    if motivo is not None:
+        raise GuardError(f"Bloqueado: {motivo}")
+
+
+def _ensure_select_only(sql: str, permitir_funcoes: bool = False) -> str:
+    """Valida `sql` e retorna a versao pronta para execucao (sem ';' final).
+
+    Duas camadas: a estrutural (um statement, SELECT/WITH, lista de palavras-chave)
+    e o guard_sql canonico, que e a autoridade de leitura. A validacao roda sobre o
+    texto de guarda de `_split_sql` (sem comentarios nem conteudo de literais). O
+    texto retornado preserva hints e literais e descarta apenas comentarios,
+    inclusive os que vem depois do `;` final, que o driver rejeitaria.
+    """
+    return _validar_e_preparar(sql, permitir_funcoes)[0]
 
 
 def log_avisos_stderr(msg: str, level: str = "INFO", _exec_id: str = "") -> None:
@@ -780,42 +806,59 @@ def _find_description_column(
     return None
 
 
+def _run_queue_guarded[T](fn: Callable[[], T]) -> T:
+    """Repete chamada à fila SMB apenas em `OracleQueueTransientError`."""
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
+            return fn()
+        except OracleQueueTransientError:
+            if attempt >= _MAX_ATTEMPTS:
+                raise
+    raise AssertionError("inalcancavel")
+
+
 def _run_catalog_queue_query(
     sql: str,
     consulta: str | None,
     guard_exec_id: str,
     exec_id: str,
 ) -> tuple[list[str], list[tuple[Any, ...]]]:
-    motivo = verificar_objetos_fila(
-        consulta, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id=guard_exec_id
+    motivo = _run_queue_guarded(
+        lambda: verificar_objetos_fila(
+            consulta, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id=guard_exec_id
+        )
     )
     if motivo is not None:
         raise GuardError(f"Bloqueado: {motivo}")
-    res = executar_consulta_fila(
-        sql, timeout=DEFAULT_TIMEOUT_SECONDS, meta={"exec_id": exec_id}
+    res = _run_queue_guarded(
+        lambda: executar_consulta_fila(
+            sql, timeout=DEFAULT_TIMEOUT_SECONDS, meta={"exec_id": exec_id}
+        )
     )
     return list(res.columns), list(res.rows)
 
 
 def cmd_distinct(args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
     table, column = args.table.upper(), args.column.upper()
-    if not conn.execute(
-        "SELECT 1 FROM columns WHERE table_name = ? AND column_name = ?",
-        (table, column),
-    ).fetchone():
-        print(
-            f"[ERRO] {table}.{column} nao existe no catalogo. Rode 'cols {table}' para conferir."
-        )
-        return 1
+    with contextlib.closing(_connect_catalog()) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM columns WHERE table_name = ? AND column_name = ?",
+            (table, column),
+        ).fetchone():
+            print(
+                f"[ERRO] {table}.{column} nao existe no catalogo. Rode 'cols {table}' para conferir."
+            )
+            return 1
 
-    desc_col = _find_description_column(conn, table, column) if args.with_desc else None
-    select_cols = f"{column}, {desc_col}" if desc_col else column
-    limit = max(1, min(args.limit, DEFAULT_DISTINCT_ROWS * 4))
-    sql = (
-        f"SELECT DISTINCT {select_cols} FROM {_catalog_owner(conn)}.{table} "  # nosec B608 - identificadores validados contra o catalogo, nunca texto livre do usuario
-        f"WHERE {column} IS NOT NULL ORDER BY 1 FETCH FIRST {limit} ROWS ONLY"
-    )
+        desc_col = (
+            _find_description_column(conn, table, column) if args.with_desc else None
+        )
+        select_cols = f"{column}, {desc_col}" if desc_col else column
+        limit = max(1, min(args.limit, DEFAULT_DISTINCT_ROWS * 4))
+        sql = (
+            f"SELECT DISTINCT {select_cols} FROM {_catalog_owner(conn)}.{table} "  # nosec B608 - identificadores validados contra o catalogo, nunca texto livre do usuario
+            f"WHERE {column} IS NOT NULL ORDER BY 1 FETCH FIRST {limit} ROWS ONLY"
+        )
     try:
         sql, consulta = _preparar_para_execucao(sql)
         creds = _resolve_online_creds()
@@ -830,9 +873,14 @@ def cmd_distinct(args: argparse.Namespace) -> int:
                 holder["connection"] = connection
                 _raise_if_expired(holder)
                 cursor = connection.cursor()
-                _sem_funcao_no_catalogo(cursor, consulta)
-                cursor.execute(sql)
-                return list(cursor.fetchall())
+                try:
+                    _sem_funcao_no_catalogo(cursor, consulta)
+                    cursor.execute(sql)
+                    return list(cursor.fetchall())
+                finally:
+                    if hasattr(cursor, "close"):
+                        with contextlib.suppress(oracledb.Error):
+                            cursor.close()
 
             rows = _run_guarded(_run)
     except ERROS_SUBCOMANDO as exc:
@@ -890,21 +938,23 @@ def _resolve_sample_where_clause(where_arg: str | None) -> tuple[str | None, boo
 
 
 def cmd_sample(args: argparse.Namespace) -> int:
-    conn = _connect_catalog()
     table = args.table.upper()
-    select_cols = _resolve_sample_select_cols(conn, table, args.columns)
-    if select_cols is None:
-        print(f"[ERRO] Tabela '{table}' nao existe no catalogo (ou colunas invalidas).")
-        return 1
-    where_clause, ok = _resolve_sample_where_clause(args.where)
-    if not ok:
-        return 1
+    with contextlib.closing(_connect_catalog()) as conn:
+        select_cols = _resolve_sample_select_cols(conn, table, args.columns)
+        if select_cols is None:
+            print(
+                f"[ERRO] Tabela '{table}' nao existe no catalogo (ou colunas invalidas)."
+            )
+            return 1
+        where_clause, ok = _resolve_sample_where_clause(args.where)
+        if not ok:
+            return 1
 
-    max_rows = max(1, min(args.max_rows, MAX_SAMPLE_ROWS))
-    sql = (
-        f"SELECT {select_cols} FROM {_catalog_owner(conn)}.{table}{where_clause} "  # nosec B608 - tabela/colunas validadas contra o catalogo; --where validado pelo guard_sql
-        f"FETCH FIRST {max_rows} ROWS ONLY"
-    )
+        max_rows = max(1, min(args.max_rows, MAX_SAMPLE_ROWS))
+        sql = (
+            f"SELECT {select_cols} FROM {_catalog_owner(conn)}.{table}{where_clause} "  # nosec B608 - tabela/colunas validadas contra o catalogo; --where validado pelo guard_sql
+            f"FETCH FIRST {max_rows} ROWS ONLY"
+        )
     try:
         sql, consulta = _preparar_para_execucao(sql)
         creds = _resolve_online_creds()
@@ -919,11 +969,16 @@ def cmd_sample(args: argparse.Namespace) -> int:
                 holder["connection"] = connection
                 _raise_if_expired(holder)
                 cursor = connection.cursor()
-                _sem_funcao_no_catalogo(cursor, consulta)
-                cursor.execute(sql)
-                return [d[0] for d in (cursor.description or [])], list(
-                    cursor.fetchall()
-                )
+                try:
+                    _sem_funcao_no_catalogo(cursor, consulta)
+                    cursor.execute(sql)
+                    return [d[0] for d in (cursor.description or [])], list(
+                        cursor.fetchall()
+                    )
+                finally:
+                    if hasattr(cursor, "close"):
+                        with contextlib.suppress(oracledb.Error):
+                            cursor.close()
 
             cols, rows = _run_guarded(_run)
     except ERROS_SUBCOMANDO as exc:
@@ -959,8 +1014,10 @@ def cmd_check(args: argparse.Namespace) -> int:
     creds = _resolve_online_creds()
     if creds is QUEUE_MODE_SENTINEL:
         try:
-            explicar_plano_fila(
-                sql, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id="CAT_CHECK"
+            _run_queue_guarded(
+                lambda: explicar_plano_fila(
+                    sql, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id="CAT_CHECK"
+                )
             )
         except ERROS_FILA as exc:
             print(f"[INVALIDO] {exc}")
@@ -973,7 +1030,13 @@ def cmd_check(args: argparse.Namespace) -> int:
         connection = connect_from_creds(creds)
         holder["connection"] = connection
         _raise_if_expired(holder)
-        connection.cursor().parse(sql)
+        cursor = connection.cursor()
+        try:
+            cursor.parse(sql)
+        finally:
+            if hasattr(cursor, "close"):
+                with contextlib.suppress(oracledb.Error):
+                    cursor.close()
 
     try:
         _run_guarded(_run)
@@ -997,8 +1060,10 @@ def cmd_explain(args: argparse.Namespace) -> int:
     creds = _resolve_online_creds()
     if creds is QUEUE_MODE_SENTINEL:
         try:
-            linhas, _ = explicar_plano_fila(
-                sql, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id="CAT_EXPLAIN"
+            linhas, _ = _run_queue_guarded(
+                lambda: explicar_plano_fila(
+                    sql, timeout=DEFAULT_TIMEOUT_SECONDS, exec_id="CAT_EXPLAIN"
+                )
             )
         except ERROS_FILA as exc:
             print(f"[ERRO] Nao foi possivel gerar o plano: {exc}")
@@ -1013,9 +1078,14 @@ def cmd_explain(args: argparse.Namespace) -> int:
         holder["connection"] = connection
         _raise_if_expired(holder)
         cursor = connection.cursor()
-        cursor.execute(f"EXPLAIN PLAN FOR {sql}")
-        cursor.execute("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY())")
-        return [row[0] for row in cursor.fetchall()]
+        try:
+            cursor.execute(f"EXPLAIN PLAN FOR {sql}")
+            cursor.execute("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY())")
+            return [row[0] for row in cursor.fetchall()]
+        finally:
+            if hasattr(cursor, "close"):
+                with contextlib.suppress(oracledb.Error):
+                    cursor.close()
 
     try:
         linhas = _run_guarded(_run)

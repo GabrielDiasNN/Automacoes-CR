@@ -121,7 +121,7 @@ if ($needsExtract) {
             throw 'O ZIP nao contem oci.dll: nao e o Instant Client Basic Windows x64.'
         }
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-        Copy-Item -Path (Join-Path $ociInZip.Directory.FullName '*') -Destination $InstallDir -Recurse -Force
+        Get-ChildItem -LiteralPath $ociInZip.Directory.FullName -Force | Copy-Item -Destination $InstallDir -Recurse -Force
     }
     finally {
         if (Test-Path -LiteralPath $staging) {
@@ -147,13 +147,23 @@ if (Test-Path -LiteralPath $sqlnetSrc) {
 
 # 5. .env: backup fora do repositorio e atualizacao das tres chaves -----------------
 New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
+# O .env tem credenciais: restringe a ACL da pasta antes da copia para evitar janela de exposicao.
+$usuario = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$dirAcl = New-Object System.Security.AccessControl.DirectorySecurity
+$dirAcl.SetAccessRuleProtection($true, $false)
+$dirAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $usuario,
+    'FullControl',
+    'ContainerInherit, ObjectInherit',
+    'None',
+    'Allow'
+)))
+Set-Acl -LiteralPath $BackupDir -AclObject $dirAcl
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $backup = Join-Path $BackupDir ".env.$stamp.bak"
 Copy-Item -LiteralPath $envPath -Destination $backup
-# O .env tem credenciais: o backup fica legivel so pelo usuario atual (sem heranca).
 $acl = New-Object System.Security.AccessControl.FileSecurity
 $acl.SetAccessRuleProtection($true, $false)
-$usuario = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($usuario, 'FullControl', 'Allow')))
 Set-Acl -LiteralPath $backup -AclObject $acl
 Write-Step "Backup do .env: $backup"

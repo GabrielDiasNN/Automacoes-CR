@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import math
 import os
 import sys
 import threading
@@ -72,12 +73,21 @@ class QueryResult:
 
 def _make_unique_names(raw_names: list[str]) -> tuple[list[str], dict[str, list[int]]]:
     seen: dict[str, int] = {}
+    used: set[str] = set()
     unique_names: list[str] = []
     positions: dict[str, list[int]] = {}
     for index, name in enumerate(raw_names, start=1):
-        seen[name] = seen.get(name, 0) + 1
         positions.setdefault(name, []).append(index)
-        unique_names.append(name if seen[name] == 1 else f"{name}__{seen[name]}")
+        count = seen.get(name, 0) + 1
+        candidate = (
+            name if count == 1 and name not in used else f"{name}__{max(count, 2)}"
+        )
+        while candidate in used:
+            count += 1
+            candidate = f"{name}__{count}"
+        seen[name] = count
+        used.add(candidate)
+        unique_names.append(candidate)
     duplicates = {name: idxs for name, idxs in positions.items() if len(idxs) > 1}
     return unique_names, duplicates
 
@@ -91,7 +101,7 @@ def _log_driver(message: str, level: str = "INFO") -> None:
 
 
 def _readonly_credentials() -> OracleCredentials:
-    load_dotenv(REPO_ROOT / ".env", override=True)
+    load_dotenv(REPO_ROOT / ".env", override=False)
     user = os.environ.get("ORACLE_READONLY_USER")
     password = os.environ.get("ORACLE_READONLY_PASSWORD")
     dsn = os.environ.get("ORACLE_CONNECT_STRING")
@@ -141,8 +151,19 @@ def _execute_once_queue(
     como bind variables. O worker já roda em transação somente leitura.
     """
     query_started_at = time.perf_counter()
+    effective_max_rows = max_rows if max_rows and max_rows > 0 else None
+    command_timeout_seconds = (
+        max(1, math.ceil(oracle_timeout_ms / 1000))
+        if oracle_timeout_ms and oracle_timeout_ms > 0
+        else None
+    )
     options = (
-        QueueRequestOptions(max_rows=max_rows) if max_rows and max_rows > 0 else None
+        QueueRequestOptions(
+            max_rows=effective_max_rows,
+            command_timeout_seconds=command_timeout_seconds,
+        )
+        if (effective_max_rows is not None or command_timeout_seconds is not None)
+        else None
     )
     result = queue_execute_query(
         sql,
@@ -151,8 +172,8 @@ def _execute_once_queue(
         options=options,
     )
     rows = result.rows
-    if max_rows and max_rows > 0:
-        rows = rows[:max_rows]
+    if effective_max_rows is not None:
+        rows = rows[:effective_max_rows]
     columns, duplicate_columns = _make_unique_names(result.columns)
     elapsed = time.perf_counter() - query_started_at
     return QueryResult(
@@ -162,12 +183,12 @@ def _execute_once_queue(
         metadata={
             "oracle_timeout_ms": int(oracle_timeout_ms),
             "oracle_timeout_applied": False,
-            "oracle_timeout_warning": False,
+            "oracle_timeout_warning": "",
             # O prazo da fila só limita a espera: a consulta não é cancelada no Oracle.
             "oracle_watchdog_applied": False,
             "elapsed_seconds": round(elapsed, 4),
             "row_count": len(rows),
-            "max_rows_limit": max_rows if max_rows and max_rows > 0 else None,
+            "max_rows_limit": effective_max_rows,
             "queue": True,
             "worker": result.worker,
             "worker_elapsed_ms": result.elapsed_ms,
@@ -283,8 +304,13 @@ def _execute_once(
                             "oracle_timeout_ms": int(oracle_timeout_ms),
                             "oracle_timeout_applied": timeout_applied,
                             "oracle_timeout_warning": timeout_warning,
+                            "oracle_watchdog_applied": True,
                             "elapsed_seconds": round(elapsed, 4),
                             "row_count": 0,
+                            "max_rows_limit": (
+                                max_rows if max_rows and max_rows > 0 else None
+                            ),
+                            "queue": False,
                         },
                     )
 
@@ -336,5 +362,6 @@ def _execute_once(
             "elapsed_seconds": round(elapsed, 4),
             "row_count": len(rows),
             "max_rows_limit": max_rows if max_rows and max_rows > 0 else None,
+            "queue": False,
         },
     )

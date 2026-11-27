@@ -8,6 +8,7 @@ sem OB, e gravando o payload original em ``DADOS_COMPLETOS`` para auditoria.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from collections.abc import Callable
@@ -171,9 +172,15 @@ def salvar_historico(
     if not rows:
         return 0
 
-    with sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS) as conn:
+    with contextlib.closing(
+        sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS)
+    ) as conn:
         apply_pragmas(conn)
-        conn.executemany(_INSERT_SQL, rows)
-        conn.commit()
+        try:
+            conn.executemany(_INSERT_SQL, rows)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     return len(rows)

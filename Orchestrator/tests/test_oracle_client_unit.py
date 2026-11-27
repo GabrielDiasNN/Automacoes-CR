@@ -4,6 +4,9 @@ O driver e substituido por um estado falso: o modo thin/thick, as chamadas
 de `init_oracle_client` e as falhas de `connect` sao controlados pelo teste.
 """
 
+import threading
+import time
+from types import SimpleNamespace
 from typing import Any
 
 import oracle_client
@@ -238,3 +241,73 @@ def test_modo_thick_depois_de_thin_consolidado_orienta_reinicio(
         _conectar()
 
     assert driver.chamadas == ["connect"], "não deveria tentar o init do Thick"
+
+
+def test_aplicar_metadados_oci_trunca_por_bytes_utf8_validos() -> None:
+    sessao = SimpleNamespace(
+        module="",
+        action="",
+        client_identifier="",
+        client_info="",
+        db_op="",
+    )
+    # "ç" e "ã" ocupam 2 bytes UTF-8 cada; 40x "ç" = 40 chars, 80 bytes.
+    erro = oracle_client.aplicar_metadados_oci(
+        sessao,
+        modulo="ç" * 40,
+        acao="ã" * 40,
+        identificador="é" * 40,
+        db_op="ô" * 25,
+    )
+    assert erro is None
+    assert len(sessao.module.encode("utf-8")) <= 64
+    assert len(sessao.action.encode("utf-8")) <= 64
+    assert len(sessao.client_identifier.encode("utf-8")) <= 64
+    assert len(sessao.client_info.encode("utf-8")) <= 64
+    assert len(sessao.db_op.encode("utf-8")) <= 32
+    assert sessao.module == "ç" * 32
+    assert sessao.db_op == "ô" * 16
+
+
+def test_concorrencia_thin_consolidado_e_fallback_thick_usa_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    estado_driver = _Driver()
+    init_calls: list[int] = []
+    barreira = threading.Barrier(2)
+
+    def connect_lento(**_kwargs: Any) -> str:
+        if estado_driver.thin:
+            barreira.wait(timeout=2)
+            raise oracledb.NotSupportedError(_MENSAGEM_DPY3015)
+        return "CONEXAO_THICK"
+
+    def init_lento(lib_dir: str, config_dir: str | None = None) -> None:
+        init_calls.append(1)
+        time.sleep(0.02)
+        estado_driver.init_oracle_client(lib_dir, config_dir)
+
+    monkeypatch.setattr(oracledb, "is_thin_mode", estado_driver.is_thin_mode)
+    monkeypatch.setattr(oracledb, "init_oracle_client", init_lento)
+    monkeypatch.setattr(oracledb, "connect", connect_lento)
+    monkeypatch.delenv("ORACLE_DRIVER_MODE", raising=False)
+    monkeypatch.setattr(oracle_client, "_ESTADO", {"thin_consolidado": False})
+
+    resultados: list[Any] = []
+    erros: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            resultados.append(_conectar())
+        except (oracledb.Error, RuntimeError, threading.BrokenBarrierError) as exc:
+            erros.append(exc)
+
+    threads = [threading.Thread(target=worker), threading.Thread(target=worker)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=3)
+
+    assert not erros
+    assert resultados == ["CONEXAO_THICK", "CONEXAO_THICK"]
+    assert len(init_calls) == 1

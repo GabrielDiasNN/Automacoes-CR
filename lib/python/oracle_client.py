@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import platform
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -46,6 +47,7 @@ LEGACY_VERIFIER_MARKER = "DPY-3015"
 # Estado do processo: `thin_consolidado` vira True após a primeira conexão Thin
 # concluída, quando o modo do driver fica fixado em Thin.
 _ESTADO: dict[str, bool] = {"thin_consolidado": False}
+_ESTADO_LOCK = threading.RLock()
 
 # Prazos de rede aplicados a toda conexão. `expire_time` é em minutos;
 # os demais são em segundos. Sem `retry_count` no driver: com o banco fora do ar,
@@ -81,6 +83,14 @@ def get_driver_mode() -> str:
     return value
 
 
+def _truncar_utf8(texto: str, max_bytes: int) -> str:
+    """Trunca `texto` ao limite de `max_bytes` UTF-8 sem partir caractere ao meio."""
+    bruto = texto.encode("utf-8")
+    if len(bruto) <= max_bytes:
+        return texto
+    return bruto[:max_bytes].decode("utf-8", errors="ignore")
+
+
 def aplicar_metadados_oci(
     connection: Any,
     *,
@@ -97,11 +107,11 @@ def aplicar_metadados_oci(
     """
     try:
         node = platform.node() or "localhost"
-        connection.module = modulo[:64]
-        connection.action = acao[:64]
-        connection.client_identifier = identificador[:64]
-        connection.client_info = f"PID:{os.getpid()}|HOST:{node}"[:64]
-        connection.db_op = db_op[:32]
+        connection.module = _truncar_utf8(modulo, 64)
+        connection.action = _truncar_utf8(acao, 64)
+        connection.client_identifier = _truncar_utf8(identificador, 64)
+        connection.client_info = _truncar_utf8(f"PID:{os.getpid()}|HOST:{node}", 64)
+        connection.db_op = _truncar_utf8(db_op, 32)
     except (oracledb.Error, AttributeError, TypeError) as exc:
         return str(exc)
     return None
@@ -132,19 +142,27 @@ def init_oracle_thick_mode(
     Falhas reais (biblioteca ausente, versão incompatível) são propagadas. No
     fallback, engolir o erro faria a reconexão falhar sem causa clara.
     """
-    if not oracledb.is_thin_mode():
-        return
-    try:
-        # Caminho vazio vira None: "" não é um diretório e mascararia o DPY-3015.
-        oracledb.init_oracle_client(lib_dir=client_lib or None, config_dir=tns_admin)
-    except oracledb.ProgrammingError as exc:
-        # ERR_LIBRARY_ALREADY_INITIALIZED: init repetido com outros argumentos
-        # (corrida entre threads, ex.: connect_within). O cliente já está ativo.
-        if "already called" not in str(exc):
-            raise
+    ativado = False
+    ja_inicializado = False
+    with _ESTADO_LOCK:
+        if not oracledb.is_thin_mode():
+            return
+        try:
+            # Caminho vazio vira None: "" não é um diretório e mascararia o DPY-3015.
+            oracledb.init_oracle_client(
+                lib_dir=client_lib or None, config_dir=tns_admin
+            )
+            ativado = True
+        except oracledb.ProgrammingError as exc:
+            # ERR_LIBRARY_ALREADY_INITIALIZED: init repetido com outros argumentos
+            # (corrida entre threads, ex.: connect_within). O cliente já está ativo.
+            if "already called" not in str(exc):
+                raise
+            ja_inicializado = True
+    if ja_inicializado:
         log_fn("Oracle Client já inicializado neste processo; reutilizando.", "WARN")
-        return
-    log_fn(f"Thick Mode ativado via '{client_lib}'.")
+    elif ativado:
+        log_fn(f"Thick Mode ativado via '{client_lib}'.")
 
 
 def _connect_once(
@@ -178,7 +196,8 @@ def connect_adaptive(  # pylint: disable=too-many-arguments
     log_fn: LogFn,
 ) -> oracledb.Connection:
     """Abre uma conexão no modo adaptativo (ver a docstring do módulo)."""
-    if get_driver_mode() == DRIVER_MODE_QUEUE:
+    modo = get_driver_mode()
+    if modo == DRIVER_MODE_QUEUE:
         # No modo queue a estação não tem rota para o Oracle e as credenciais locais
         # podem estar vazias (`resolve_oracle_credentials` não as exige): tentar a
         # conexão direta daria erro de rede ou de login sem dizer a causa.
@@ -187,30 +206,36 @@ def connect_adaptive(  # pylint: disable=too-many-arguments
             "vão pela fila SMB (oracle_queue.execute_query). Para usar esta ferramenta, "
             "rode-a com 'auto' ou 'thick' numa máquina com rota para o banco."
         )
-    if get_driver_mode() == DRIVER_MODE_THICK:
-        if oracledb.is_thin_mode() and _ESTADO["thin_consolidado"]:
-            # ORACLE_DRIVER_MODE=thick depois de uma conexão Thin: o init falharia com
-            # erro genérico do driver. Mesma orientação do ramo DPY-3015.
-            raise oracledb.NotSupportedError(
-                f"ORACLE_DRIVER_MODE=thick pedido. {_MSG_THIN_FIXO}"
-            )
-        init_oracle_thick_mode(client_lib, tns_admin, log_fn)
+    if modo == DRIVER_MODE_THICK:
+        with _ESTADO_LOCK:
+            if oracledb.is_thin_mode() and _ESTADO["thin_consolidado"]:
+                # ORACLE_DRIVER_MODE=thick depois de uma conexão Thin: o init falharia com
+                # erro genérico do driver. Mesma orientação do ramo DPY-3015.
+                raise oracledb.NotSupportedError(
+                    f"ORACLE_DRIVER_MODE=thick pedido. {_MSG_THIN_FIXO}"
+                )
+            init_oracle_thick_mode(client_lib, tns_admin, log_fn)
+    era_thin = oracledb.is_thin_mode()
     try:
         conexao = _connect_once(user, password, dsn, tns_admin)
     except oracledb.NotSupportedError as exc:
-        if LEGACY_VERIFIER_MARKER not in str(exc) or not oracledb.is_thin_mode():
+        if LEGACY_VERIFIER_MARKER not in str(exc) or not era_thin:
             raise
-        if _ESTADO["thin_consolidado"]:
-            # Modo já fixado em Thin neste processo: sem reinício não há como trocar.
-            # Propaga a causa original em vez de falhar no init com outra mensagem.
-            raise oracledb.NotSupportedError(f"{exc} {_MSG_THIN_FIXO}") from exc
+        with _ESTADO_LOCK:
+            if oracledb.is_thin_mode():
+                if _ESTADO["thin_consolidado"]:
+                    # Modo já fixado em Thin neste processo: sem reinício não há como trocar.
+                    # Propaga a causa original em vez de falhar no init com outra mensagem.
+                    raise oracledb.NotSupportedError(f"{exc} {_MSG_THIN_FIXO}") from exc
+                log_fn(
+                    "Servidor ofereceu verificador de senha legado (DPY-3015): "
+                    "ativando Thick Mode e reconectando.",
+                    "WARN",
+                )
+                init_oracle_thick_mode(client_lib, tns_admin, log_fn)
     else:
-        _ESTADO["thin_consolidado"] = oracledb.is_thin_mode()
+        with _ESTADO_LOCK:
+            if era_thin and oracledb.is_thin_mode():
+                _ESTADO["thin_consolidado"] = True
         return conexao
-    log_fn(
-        "Servidor ofereceu verificador de senha legado (DPY-3015): "
-        "ativando Thick Mode e reconectando.",
-        "WARN",
-    )
-    init_oracle_thick_mode(client_lib, tns_admin, log_fn)
     return _connect_once(user, password, dsn, tns_admin)

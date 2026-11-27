@@ -56,6 +56,64 @@ def _summary_from_records(
     }
 
 
+def _build_detail_summary(
+    cursor: sqlite3.Cursor,
+    target_type: str,
+    table_name: str,
+    where_sql: str,
+    params: list[Any],
+) -> dict[str, Any]:
+    """Calcula KPIs agregados sobre todo o recorte filtrado (sem LIMIT/OFFSET)."""
+    row = cursor.execute(
+        f"""
+        SELECT
+            COUNT(DISTINCT CASE WHEN TRIM(COALESCE(NUMERO_OB, '')) != '' THEN TRIM(NUMERO_OB) END) AS ob_distintas,
+            COUNT(*) AS fases_concluidas,
+            SUM(COALESCE(QT_KG, 0)) AS kg_total,
+            SUM(COALESCE(QT_MT, 0)) AS mt_total,
+            SUM(COALESCE(MIN_REAL, 0)) AS min_real_total,
+            SUM(COALESCE(MIN_PREV, 0)) AS min_prev_total,
+            SUM(CASE WHEN REPROCESSO = 1 THEN COALESCE(QT_KG, 0) ELSE 0 END) AS reprocesso_kg
+        FROM {table_name}
+        WHERE {where_sql}
+        """,  # nosec B608
+        params,
+    ).fetchone()
+    turnos_rows = cursor.execute(
+        f"""
+        SELECT DISTINCT COALESCE(NULLIF(TRIM(TURNO_LABEL), ''), 'Indefinido') AS turno
+        FROM {table_name}
+        WHERE {where_sql}
+        ORDER BY turno
+        """,  # nosec B608
+        params,
+    ).fetchall()
+
+    fases = int(row["fases_concluidas"] or 0) if row else 0
+    kg_total = float(row["kg_total"] or 0.0) if row else 0.0
+    mt_total = float(row["mt_total"] or 0.0) if row else 0.0
+    min_real = float(row["min_real_total"] or 0.0) if row else 0.0
+    min_prev = float(row["min_prev_total"] or 0.0) if row else 0.0
+    reprocesso_kg = float(row["reprocesso_kg"] or 0.0) if row else 0.0
+    return {
+        "target_type": target_type,
+        "ob_distintas": int(row["ob_distintas"] or 0) if row else 0,
+        "fases_concluidas": fases,
+        "kg_total": _round(kg_total),
+        "mt_total": _round(mt_total),
+        "eficiencia_tempo_pct": _round(
+            (min_prev / min_real * 100.0) if min_real > 0 else 0.0
+        ),
+        "reprocesso_kg_pct": _round(
+            (reprocesso_kg / kg_total * 100.0) if kg_total > 0 else 0.0
+        ),
+        "produtividade_kg_h": _round(
+            (kg_total * 60.0 / min_real) if min_real > 0 else 0.0
+        ),
+        "turnos": [str(item["turno"]) for item in turnos_rows],
+    }
+
+
 def _build_trace(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Agrupa registros por OB e monta o trace cronológico de fases."""
     grouped: dict[str, list[dict[str, Any]]] = {}

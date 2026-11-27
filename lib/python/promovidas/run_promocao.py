@@ -62,9 +62,7 @@ def _resultado_card_unico(exit_code: int) -> tuple[int, bool]:
     return EXIT_FALHA_ORQUESTRACAO, False
 
 
-def _resultado_lote(
-    entrega: hw.EntregaWhatsApp, exit_code: int
-) -> tuple[int, bool]:
+def _resultado_lote(entrega: hw.EntregaWhatsApp, exit_code: int) -> tuple[int, bool]:
     if entrega.status == "AllSent":
         return 0, True
     if entrega.status == "PartialSent":
@@ -130,17 +128,20 @@ def _despachar_excecoes(
     *,
     dry_run: bool,
 ) -> int:
-    if "whatsapp" not in cfg.destinos or cfg.excecao is None or not excecoes:
+    if "whatsapp" not in cfg.destinos or cfg.excecao is None:
         return 0
     state_path = pasta / "seen_state.json"
     state_tmp_path = pasta / "seen_state.json.tmp"
+    estado_atual = estado.ler_estado(state_path)
     pendentes, proximo_estado = estado.selecionar_pendentes(
         excecoes,
         cfg.chave,
-        estado.ler_estado(state_path),
+        estado_atual,
         renotificar_apos_horas=cfg.excecao.renotificar_apos_horas,
     )
     if not pendentes:
+        if not dry_run and proximo_estado != estado_atual:
+            estado.gravar_estado(state_path, proximo_estado, exec_id=ctx.exec_id)
         hr.log(
             ctx, "Nenhuma excecao pendente de notificacao.", "INFO", step="transform"
         )
@@ -197,7 +198,9 @@ def _executar_promocao(
     if not ok_pf:
         return hr.oracle_preflight_exit_code(
             oracle_pf,
-            outros_checks=lambda: hr.run_preflight(ctx, [Path(sys.executable), sql_path]),
+            outros_checks=lambda: hr.run_preflight(
+                ctx, [Path(sys.executable), sql_path]
+            ),
         )
 
     hr.start_step(ctx, "extract", mensagem=f"Executando {cfg.consulta}")
@@ -263,7 +266,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return hr.finish(ctx, code)
     except hr.LockTimeoutError as exc:
         hr.log(ctx, str(exc), "WARN")
-        return 0
+        return hr.finish(ctx, 0, msg=str(exc))
     except Exception as exc:  # pylint: disable=broad-exception-caught
         hr.log(ctx, f"Falha nao tratada: {exc}", "ERROR")
         return hr.finish(ctx, 1)

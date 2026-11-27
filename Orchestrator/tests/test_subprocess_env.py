@@ -109,6 +109,20 @@ def test_allowlist_nao_contem_segredo_conhecido() -> None:
 
 
 @pytest.mark.unitario
+def test_deadline_epoch_nao_vaza_do_ambiente_pai() -> None:
+    """ORACLE_QUEUE_DEADLINE_EPOCH é efêmero por execução e não pode ser herdado."""
+    assert "ORACLE_QUEUE_DEADLINE_EPOCH" not in ALLOWED_ENV_KEYS
+    with patch.dict(os.environ, {"ORACLE_QUEUE_DEADLINE_EPOCH": "1700000000.0"}):
+        env = build_subprocess_env()
+        env_com_extra = build_subprocess_env(
+            {"ORACLE_QUEUE_DEADLINE_EPOCH": "9999999999.0"}
+        )
+
+    assert "ORACLE_QUEUE_DEADLINE_EPOCH" not in env
+    assert env_com_extra["ORACLE_QUEUE_DEADLINE_EPOCH"] == "9999999999.0"
+
+
+@pytest.mark.unitario
 def test_worker_delega_para_a_fonte_unica() -> None:
     """O worker não pode manter uma cópia divergente da allowlist."""
 

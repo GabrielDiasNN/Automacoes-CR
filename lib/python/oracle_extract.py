@@ -376,7 +376,8 @@ def _registrar_saude_wan(dsn: str, tamanho: int, log: LogFn, exec_id: str) -> No
         )
     # Residual: telemetria WAN nunca bloqueia a extração (contrato); o callback `log` é injetado pelo chamador e pode levantar qualquer exceção, que sem este catch abortaria a consulta.
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        log(f"Aviso não-bloqueante no pre-flight WAN: {exc}", "DEBUG", exec_id)
+        with contextlib.suppress(Exception):
+            log(f"Aviso não-bloqueante no pre-flight WAN: {exc}", "DEBUG", exec_id)
 
 
 def _fetch_all_queue(
@@ -440,7 +441,12 @@ def classify_oracle_exit_code(exc: BaseException) -> int:
         return 7
     if isinstance(
         exc,
-        (oracle_queue.OracleQueueBlockedError, ValueError, oracledb.NotSupportedError),
+        (
+            oracle_queue.OracleQueueBlockedError,
+            ValueError,
+            TypeError,
+            oracledb.NotSupportedError,
+        ),
     ):
         return 5
     if isinstance(exc, oracle_queue.OracleQueueError) and not isinstance(
@@ -514,38 +520,36 @@ def fetch_all(  # pylint: disable=too-many-arguments
         log_fn=lambda msg, lvl="INFO": log(msg, lvl, exec_id),
     )
 
-    instrument_oracle_session(
-        connection,
-        _nome_da_automacao(automacao),
-        exec_id,
-        "FETCH",
-        lambda msg, lvl="DEBUG": log(msg, lvl, exec_id),
-    )
-
     with connection:
-        cursor = connection.cursor()
-
-        # Sincroniza arraysize e prefetchrows com o batch_size efetivo:
-        # - prefetchrows traz o 1º lote inteiro já junto com a resposta do execute() (0 round-trips de fetch)
-        # - arraysize garante que lotes subsequentes venham em blocos únicos de 64KB (SDU)
-        cursor.arraysize = effective_size
-        cursor.prefetchrows = effective_size
-        cursor.execute(sql, params or {})
-        if not cursor.description:
-            return [], []
-        columns = [col[0] for col in cursor.description]
-        rows: list[Any] = []
-        while True:
-            batch = cursor.fetchmany(effective_size)
-            if not batch:
-                break
-            rows.extend(batch)
-        log(
-            f"Query executada com sucesso. Linhas retornadas: {len(rows)}",
-            "INFO",
+        instrument_oracle_session(
+            connection,
+            _nome_da_automacao(automacao),
             exec_id,
+            "FETCH",
+            lambda msg, lvl="DEBUG": log(msg, lvl, exec_id),
         )
-        return columns, rows
+        with contextlib.closing(connection.cursor()) as cursor:
+            # Sincroniza arraysize e prefetchrows com o batch_size efetivo:
+            # - prefetchrows traz o 1º lote inteiro já junto com a resposta do execute() (0 round-trips de fetch)
+            # - arraysize garante que lotes subsequentes venham em blocos únicos de 64KB (SDU)
+            cursor.arraysize = effective_size
+            cursor.prefetchrows = effective_size
+            cursor.execute(sql, params or {})
+            if not cursor.description:
+                return [], []
+            columns = [col[0] for col in cursor.description]
+            rows: list[Any] = []
+            while True:
+                batch = cursor.fetchmany(effective_size)
+                if not batch:
+                    break
+                rows.extend(batch)
+            log(
+                f"Query executada com sucesso. Linhas retornadas: {len(rows)}",
+                "INFO",
+                exec_id,
+            )
+            return columns, rows
 
 
 def serialize_rows(

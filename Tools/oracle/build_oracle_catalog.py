@@ -355,13 +355,15 @@ def _dedupe_objects_by_name(
     return list(best.values())
 
 
-def _insert_objects_and_columns(conn: sqlite3.Connection, data: CatalogData) -> None:
+def _insert_objects_and_columns(
+    conn: sqlite3.Connection,
+    data: CatalogData,
+    objects: list[tuple[Any, ...]] | None = None,
+) -> None:
+    deduped = _dedupe_objects_by_name(data.objects) if objects is None else objects
     conn.executemany(
         "INSERT INTO objects VALUES (?, ?, ?, ?, ?, ?)",
-        [
-            (o[0], o[1], o[2], o[3], str(o[4]) if o[4] else None, o[5])
-            for o in _dedupe_objects_by_name(data.objects)
-        ],
+        [(o[0], o[1], o[2], o[3], str(o[4]) if o[4] else None, o[5]) for o in deduped],
     )
     conn.executemany(
         "INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -402,10 +404,15 @@ def _insert_constraints_and_indexes(
         conn.executemany("INSERT INTO view_source VALUES (?, ?)", data.view_source)
 
 
-def _insert_search_index(conn: sqlite3.Connection, data: CatalogData) -> None:
+def _insert_search_index(
+    conn: sqlite3.Connection,
+    data: CatalogData,
+    objects: list[tuple[Any, ...]] | None = None,
+) -> None:
+    deduped = data.objects if objects is None else objects
     conn.executemany(
         "INSERT INTO search_idx (object_name, column_name, comment) VALUES (?, '', ?)",
-        [(o[0], o[5]) for o in data.objects if o[5]],
+        [(o[0], o[5]) for o in deduped if o[5]],
     )
     conn.executemany(
         "INSERT INTO search_idx (object_name, column_name, comment) VALUES (?, ?, ?)",
@@ -413,13 +420,19 @@ def _insert_search_index(conn: sqlite3.Connection, data: CatalogData) -> None:
     )
 
 
-def _insert_meta(conn: sqlite3.Connection, owner: str, data: CatalogData) -> None:
+def _insert_meta(
+    conn: sqlite3.Connection,
+    owner: str,
+    data: CatalogData,
+    total_objects: int | None = None,
+) -> None:
+    count = len(data.objects) if total_objects is None else total_objects
     conn.executemany(
         "INSERT INTO meta VALUES (?, ?)",
         [
             ("owner", owner),
             ("extracted_at", time.strftime("%Y-%m-%dT%H:%M:%S")),
-            ("total_objects", str(len(data.objects))),
+            ("total_objects", str(count)),
             ("total_columns", str(len(data.columns))),
             ("total_constraints", str(len(data.constraints))),
             ("total_indexes", str(len(data.index_data.indexes))),
@@ -433,13 +446,14 @@ def _write_catalog(output_path: Path, owner: str, data: CatalogData) -> None:
     if tmp_path.exists():
         tmp_path.unlink()
 
+    deduped_objects = _dedupe_objects_by_name(data.objects)
     conn = sqlite3.connect(tmp_path)
     try:
         conn.executescript(_SCHEMA_DDL)
-        _insert_objects_and_columns(conn, data)
+        _insert_objects_and_columns(conn, data, deduped_objects)
         _insert_constraints_and_indexes(conn, data)
-        _insert_search_index(conn, data)
-        _insert_meta(conn, owner, data)
+        _insert_search_index(conn, data, deduped_objects)
+        _insert_meta(conn, owner, data, len(deduped_objects))
         conn.commit()
     finally:
         conn.close()

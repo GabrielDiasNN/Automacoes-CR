@@ -97,13 +97,38 @@ _NAO_SEGURO: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9_.-]")
 _MARCADOR_NIVEL: Final[re.Pattern[str]] = re.compile(
     r"(?:\[(INFO|WARN|ERROR|ERRO|DEBUG|ALERT)\]|^\s*(WARNING):)", re.IGNORECASE
 )
-_COMENTARIO_INLINE_ENV: Final[re.Pattern[str]] = re.compile(r"\s+#.*$")
 _INTEIRO: Final[re.Pattern[str]] = re.compile(r"^\s*-?\d+\s*$")
 _CHAVE_API: Final[re.Pattern[str]] = re.compile(r"^ORCHESTRATOR_API_KEY=(.*)$")
 _PADRAO_TS_LOG: Final[re.Pattern[str]] = re.compile(
     r'^\{"(?:ts|timestamp)":"(\d{4}-\d{2}-\d{2})T'
 )
 _EMISSAO = threading.Lock()
+
+
+def _extrair_valor_env(bruto: str) -> str:
+    """Remove comentario inline (` #...`) fora de aspas e aspas envolventes."""
+    texto = bruto.strip()
+    aspas: str | None = None
+    escapado = False
+    for idx, ch in enumerate(texto):
+        if escapado:
+            escapado = False
+            continue
+        if ch == "\\" and aspas == '"':
+            escapado = True
+            continue
+        if ch in ('"', "'"):
+            if aspas is None:
+                aspas = ch
+            elif aspas == ch:
+                aspas = None
+            continue
+        if ch == "#" and aspas is None and idx > 0 and texto[idx - 1].isspace():
+            texto = texto[:idx].rstrip()
+            break
+    if len(texto) >= 2 and texto[0] == texto[-1] and texto[0] in ('"', "'"):
+        texto = texto[1:-1]
+    return texto.strip()
 
 
 def parse_env_line(linha: str) -> tuple[str, str] | None:
@@ -115,7 +140,7 @@ def parse_env_line(linha: str) -> tuple[str, str] | None:
     if len(partes) != 2:
         return None
     chave = partes[0].strip()
-    valor = _COMENTARIO_INLINE_ENV.sub("", partes[1].strip()).strip()
+    valor = _extrair_valor_env(partes[1])
     if not chave or not valor:
         return None
     return chave, valor
@@ -1545,14 +1570,15 @@ def oracle_host(conexao: str) -> str:
 
 
 def find_tnsnames() -> Path | None:
-    """tnsnames.ora na ordem do cliente Oracle: TNS_ADMIN e depois ORACLE_CLIENT_PATH."""
+    """tnsnames.ora na ordem do cliente Oracle: TNS_ADMIN, ORACLE_CLIENT_LIB_DIR e ORACLE_CLIENT_PATH."""
     pastas: list[Path] = []
     tns_admin = os.environ.get("TNS_ADMIN", "").strip()
     if tns_admin:
         pastas.append(Path(tns_admin))
-    cliente = os.environ.get("ORACLE_CLIENT_PATH", "").strip()
-    if cliente:
-        pastas.append(Path(cliente) / "network" / "admin")
+    for env_cliente in ("ORACLE_CLIENT_LIB_DIR", "ORACLE_CLIENT_PATH"):
+        cliente = os.environ.get(env_cliente, "").strip()
+        if cliente:
+            pastas.append(Path(cliente) / "network" / "admin")
     for pasta in pastas:
         if _existe(pasta / "tnsnames.ora"):
             return pasta / "tnsnames.ora"

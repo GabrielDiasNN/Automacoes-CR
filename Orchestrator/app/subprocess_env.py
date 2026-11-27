@@ -39,10 +39,12 @@ ALLOWED_ENV_KEYS = frozenset(
         # Pasta e prazo da fila SMB (modo queue): caminho e número, não segredo.
         # Filtradas, o refresh do Beneficiamento gravava na pasta padrão enquanto as
         # extrações usavam a configurada.
+        # ORACLE_QUEUE_DEADLINE_EPOCH NÃO entra aqui: é timestamp absoluto efêmero
+        # por execução e só é injetado via `extra` em `worker._build_subprocess_env`
+        # quando `queue_group == "oracle"`.
         "ORACLE_QUEUE_DIR",
         "ORACLE_QUEUE_TIMEOUT_SECONDS",
         "ORACLE_QUEUE_CLAIM_TIMEOUT_SECONDS",
-        "ORACLE_QUEUE_DEADLINE_EPOCH",
         # Caminho do tnsnames.ora, não credencial. Lido por
         # `beneficiamento/oracle.py`; usuário/senha/DSN vêm do `.env` via
         # `load_dotenv(override=True)`, nunca do ambiente herdado.
