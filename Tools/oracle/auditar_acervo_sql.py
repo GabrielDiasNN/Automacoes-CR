@@ -109,16 +109,25 @@ def _measurer_deadline(runs: int, timeout: int) -> int:
     return int(runs * MAX_ATTEMPTS * (timeout + ATTEMPT_MARGIN_S) + 60)
 
 
+def _rotulo_do_arquivo(path: Path) -> str:
+    """Caminho relativo ao repositório; fora dele, o caminho como foi dado."""
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def audit_file(path: Path, runs: int, timeout: int) -> dict[str, Any]:
     """Mede um arquivo com o `medir_sql_oracle.py` e devolve o registro da rodada.
 
     Estouro do prazo do medidor vira FALHA deste arquivo; a varredura segue.
     """
+    arquivo = _rotulo_do_arquivo(path)
     try:
         sql = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return {
-            "file": path.relative_to(ROOT).as_posix(),
+            "file": arquivo,
             "flags": ["FALHA"],
             "median_ms": None,
             "noise_ms": None,
@@ -153,7 +162,7 @@ def audit_file(path: Path, runs: int, timeout: int) -> dict[str, Any]:
             )
         except subprocess.TimeoutExpired:
             return {
-                "file": path.relative_to(ROOT).as_posix(),
+                "file": arquivo,
                 "flags": ["FALHA"],
                 "median_ms": None,
                 "noise_ms": None,
@@ -165,7 +174,7 @@ def audit_file(path: Path, runs: int, timeout: int) -> dict[str, Any]:
         report = json.loads(out.read_text(encoding="utf-8")) if out.is_file() else None
     summary = (report or {}).get("summary") or {}
     return {
-        "file": path.relative_to(ROOT).as_posix(),
+        "file": arquivo,
         "flags": classify(report, cap),
         "median_ms": summary.get("median_ms"),
         "noise_ms": summary.get("noise_ms"),

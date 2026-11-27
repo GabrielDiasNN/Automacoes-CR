@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ..data.schema import init_db
+from ..data.schema import open_historico_connection
 from ._queries import (
     _build_fases_criticas,
     _build_filtered_dataset,
@@ -29,9 +29,7 @@ def obter_overview_historico(  # pylint: disable=too-many-locals
     filtros: dict[str, Any], db_path: Path | str | None = None
 ) -> dict[str, Any]:
     """Monta o contrato operacional V1 sem abrir Oracle."""
-    path = init_db(db_path)
-    with sqlite3.connect(path) as conn:
-        conn.row_factory = sqlite3.Row
+    with open_historico_connection(db_path, row_factory=sqlite3.Row) as conn:
         cursor = conn.cursor()
         normalized = _normalize_request_filters(filtros)
         dt_inicio, dt_fim, max_data_fim = _resolve_overview_window(cursor, filtros)

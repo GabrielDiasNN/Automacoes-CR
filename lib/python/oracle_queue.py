@@ -188,6 +188,10 @@ class QueueRequestOptions:
         action_clean = self.action.strip().lower()
         if action_clean not in QUEUE_ACTIONS:
             raise ValueError(f"Ação inválida para fila Oracle: {self.action!r}")
+        if self.ttl_seconds is not None and self.ttl_seconds <= 0:
+            raise ValueError(
+                f"ttl_seconds deve ser positivo para fila Oracle: {self.ttl_seconds!r}"
+            )
         object.__setattr__(self, "action", action_clean)
 
 
@@ -399,30 +403,64 @@ def check_worker_liveness(
     return result
 
 
+def _health_snapshot_base(
+    *,
+    enabled: bool,
+    alive: bool | None,
+    reachable: bool | None,
+    source: str,
+    error: str | None = None,
+) -> dict[str, Any]:
+    """Schema padrão de 13 chaves compartilhado com `oracle_queue_health`."""
+    return {
+        "enabled": enabled,
+        "alive": alive,
+        "reachable": reachable,
+        "source": source,
+        "age_seconds": None,
+        "state": None,
+        "oracle_ok": None,
+        "version": None,
+        "machine": None,
+        "req_id": None,
+        "pending_requests": 0,
+        "active_procs": 0,
+        "error": error,
+    }
+
+
 def collect_worker_health_snapshot() -> dict[str, Any]:
     """Snapshot padrão de saúde da fila Oracle para diagnóstico e recovery do Orchestrator."""
     mode = os.environ.get("ORACLE_DRIVER_MODE", "").strip().lower()
     if mode != "queue":
-        return {
-            "enabled": False,
-            "alive": None,
-            "reachable": None,
-            "source": "disabled",
-        }
+        return _health_snapshot_base(
+            enabled=False,
+            alive=None,
+            reachable=None,
+            source="disabled",
+        )
     try:
         info = check_worker_liveness(probe_signal_seconds=0.0)
-        info["enabled"] = True
-        return info
+        snapshot = _health_snapshot_base(
+            enabled=True,
+            alive=False,
+            reachable=False,
+            source="none",
+        )
+        snapshot.update(info)
+        snapshot["enabled"] = True
+        snapshot["error"] = None
+        return snapshot
     # `check_worker_liveness` já trata as falhas de leitura da fila; aqui sobram as de
     # rede/disco (OSError) e host UNC malformado (UnicodeError na resolução, ValueError).
     except (OSError, ValueError) as exc:
-        return {
-            "enabled": True,
-            "alive": False,
-            "reachable": False,
-            "source": "error",
-            "error": str(exc)[:180],
-        }
+        return _health_snapshot_base(
+            enabled=True,
+            alive=False,
+            reachable=False,
+            source="error",
+            error=str(exc)[:180],
+        )
 
 
 def cleanup_requests_for_exec_id(exec_id: str, queue_dir: str | None = None) -> int:
@@ -514,7 +552,7 @@ def _convert_rows(types: list[str], body: list[list[str]]) -> list[tuple[Any, ..
             for conv, col in zip(converters, zip(*body, strict=True), strict=True)
         ]
         return list(zip(*columns_data, strict=True))
-    except ValueError as e:
+    except (ValueError, OverflowError) as e:
         # Malformada (valor que não converte) é determinística: repetir não ajuda.
         raise OracleQueueError("worker", f"Resposta malformada do worker: {e}") from e
 
@@ -618,7 +656,13 @@ def _encode_param(name: str, value: Any) -> str:
         enc = "z:"
     elif isinstance(value, bool):
         enc = f"n:{int(value)}"
-    elif isinstance(value, (int, Decimal)):
+    elif isinstance(value, Decimal):
+        if not value.is_finite():
+            raise ValueError(
+                f"Valor Decimal não finito no parâmetro :{key}: {value!r}"
+            )
+        enc = f"n:{value}"
+    elif isinstance(value, int):
         enc = f"n:{value}"
     elif isinstance(value, float):
         if not math.isfinite(value):
@@ -783,21 +827,24 @@ def _sweep_orphans(
     ultima = _last_sweep.get(base_dir)
     if ultima is not None and agora - ultima < SWEEP_INTERVAL_SECONDS:
         return
-    _last_sweep[base_dir] = agora
     limite = _server_now(base_dir) - max_age_seconds
+    velhas: list[str] = []
     try:
         with os.scandir(base_dir) as entries:
-            velhas = [
-                e.path
-                for e in entries
-                if (
+            for e in entries:
+                if not (
                     e.name.startswith("res_")
                     or (e.name.startswith("req_") and e.name.endswith((".sql", ".tmp")))
-                )
-                and e.stat().st_mtime < limite
-            ]
+                ):
+                    continue
+                try:
+                    if e.stat().st_mtime < limite:
+                        velhas.append(e.path)
+                except OSError:
+                    continue
     except OSError:
         return
+    _last_sweep[base_dir] = agora
     for path in velhas:
         _remove_quietly(path)
 
@@ -888,7 +935,11 @@ def build_queue_payload(
     opts = options or QueueRequestOptions()
     body_sql = strip_sql_comments(sql) if opts.strip_comments else sql
     if not body_sql.strip():
-        return body_sql
+        raise ValueError("SQL vazio não pode ser enviado para a fila Oracle.")
+    if any(line.lstrip().startswith("--#") for line in body_sql.splitlines()):
+        raise ValueError(
+            "SQL não pode conter linhas iniciadas por '--#' (reservado para diretivas da fila)."
+        )
 
     header_lines: list[str] = []
     meta_str = _sanitize_meta(opts.meta)
@@ -896,11 +947,14 @@ def build_queue_payload(
         header_lines.append(f"--#meta:{meta_str}")
     if opts.action != "query":
         header_lines.append(f"--#action:{opts.action}")
-    effective_ttl = (
-        int(opts.ttl_seconds)
-        if opts.ttl_seconds is not None
-        else max(1, min(900, int(round(timeout_seconds))))
-    )
+    if opts.ttl_seconds is not None:
+        if opts.ttl_seconds <= 0:
+            raise ValueError(
+                f"ttl_seconds deve ser positivo para fila Oracle: {opts.ttl_seconds!r}"
+            )
+        effective_ttl = max(1, min(900, int(opts.ttl_seconds)))
+    else:
+        effective_ttl = max(1, min(900, int(round(timeout_seconds))))
     header_lines.append(f"--#ttl:{effective_ttl}")
     if opts.command_timeout_seconds is not None:
         header_lines.append(
@@ -929,6 +983,7 @@ def _await_queue_response(
         else None
     )
     falha_desde: float | None = None
+    ultima_falha: OSError | None = None
     for _ in _poll(timeout_seconds):
         try:
             data = _try_take(res_path)
@@ -938,6 +993,7 @@ def _await_queue_response(
             agora = time.monotonic()
             if falha_desde is None:
                 falha_desde = agora
+            ultima_falha = e
             if agora - falha_desde >= SMB_OUTAGE_GRACE_SECONDS:
                 raise OracleQueueTransientError(
                     "smb",
@@ -946,6 +1002,7 @@ def _await_queue_response(
                 ) from e
             continue
         falha_desde = None
+        ultima_falha = None
         if data is not None:
             return data
         if claim_deadline is not None and time.monotonic() >= claim_deadline:
@@ -956,6 +1013,13 @@ def _await_queue_response(
                     f"Pedido não foi reivindicado pelo worker Oracle em "
                     f"{effective_claim:.0f}s (TSplus Worker possivelmente parado).",
                 )
+    if falha_desde is not None:
+        duracao = max(0.0, time.monotonic() - falha_desde)
+        raise OracleQueueTransientError(
+            "smb",
+            f"Pasta da fila Oracle inacessível há {duracao:.0f}s ao expirar a espera "
+            f"({timeout_seconds:g}s): {ultima_falha}",
+        ) from ultima_falha
     if os.path.exists(final_req_path):
         if _worker_morto(base_dir):
             raise OracleQueueWorkerOfflineError(

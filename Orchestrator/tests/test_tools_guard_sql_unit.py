@@ -270,3 +270,63 @@ def test_verificar_objetos_nomeia_o_que_achou() -> None:
     assert motivo is not None
     assert "SGTPRD.PKG (PACKAGE)" in motivo and "SGTPRD.FN (FUNCTION)" in motivo
     assert cursor.executados == ["SELECT v"]
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        'SELECT "MINHA_FUNCAO"(1) FROM dual',
+        'SELECT "minha_funcao"(1) FROM dual',
+        'SELECT SGTPRD."MINHA_FUNCAO"(1) FROM dual',
+        'SELECT "SGTPRD"."MINHA_FUNCAO"(1) FROM dual',
+    ],
+)
+def test_canonico_bloqueia_funcao_entre_aspas_duplas(sql: str) -> None:
+    canon = wrapper.load_canonical()
+    veredito = canon.classificar(sql)
+    assert veredito["permitido"] is False
+    assert veredito["classe"] == "chamada_funcao"
+
+
+def test_canonico_libera_cte_com_nome_entre_aspas_e_lista_de_colunas() -> None:
+    canon = wrapper.load_canonical()
+    sql = 'WITH /* c */ "MinhaCte" (a, b) AS (SELECT 1, 2 FROM DUAL) SELECT a FROM "MinhaCte"'
+    veredito = canon.classificar(sql)
+    assert veredito["permitido"] is True
+    assert "MinhaCte" in veredito["verificar_objetos"]
+
+
+def test_canonico_preserva_caixa_original_de_citados_na_consulta_verificacao() -> None:
+    canon = wrapper.load_canonical()
+    veredito = canon.classificar('SELECT "minha_funcao" FROM dual')
+    assert veredito["permitido"] is True
+    assert "minha_funcao" in veredito["verificar_objetos"]
+    assert "'minha_funcao'" in veredito["consulta_verificacao"]
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY(filter_preds => '1=1'))",
+        "SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY(NULL, filter_preds => '1=1'))",
+        "SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_CURSOR(sql_id => 'x', format => 'ALL'))",
+    ],
+)
+def test_canonico_bloqueia_parametro_nomeado_em_dbms_xplan_display(sql: str) -> None:
+    canon = wrapper.load_canonical()
+    veredito = canon.classificar(sql)
+    assert veredito["permitido"] is False
+    assert veredito["classe"] == "chamada_sensivel"
+
+
+def test_canonico_nao_trata_identificador_terminado_em_n_como_prefixo_nq() -> None:
+    canon = wrapper.load_canonical()
+    # Antes do fix, `anq'[x'; DELETE FROM t; ']'` era consumido como literal q'...'
+    sql_desync = "SELECT anq'[x'; DELETE FROM t; ']' FROM dual"
+    limpo = canon.remover_literais_e_comentarios(sql_desync)
+    assert "DELETE" in limpo
+    assert canon.classificar(sql_desync)["permitido"] is False
+    # nq'[...]' legítimo continua sendo consumido como literal
+    limpo_legitimo = canon.remover_literais_e_comentarios("SELECT nq'[; DELETE FROM t]' FROM dual")
+    assert "DELETE" not in limpo_legitimo
+    assert canon.classificar("SELECT nq'[; DELETE FROM t]' FROM dual")["permitido"] is True

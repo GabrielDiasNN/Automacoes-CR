@@ -978,6 +978,7 @@ def _terminate_active_processes() -> None:
             _force_kill(proc.pid)
         except OSError as e:
             logger.warning("Falha ao encerrar processo %s: %s", eid, e)
+        _cleanup_oracle_queue_requests(eid)
 
 
 def _iniciar_threads_de_apoio() -> None:
@@ -1107,19 +1108,20 @@ def main_loop() -> None:
             wakeup_event.clear()
 
     logger.info("Shutdown solicitado. Encerrando tarefas ativas...")
-    _terminate_active_processes()
-    # Deadline defensivo: aguarda as tarefas ativas encerrarem por até
-    # SHUTDOWN_GRACE_SECONDS (após o force-kill, o run_task desenrola rápido).
-    # Sem o timeout, uma thread presa em I/O que não reavalia shutdown_event
-    # penduraria o worker indefinidamente em executor.shutdown(wait=True) (#21).
+    shutdown_event.set()
+    # Aguarda os monitores reagirem ao `shutdown_event` antes de matar os filhos:
+    # cada `_monitor_process` encerra seu subprocesso, executa `_cleanup_oracle_queue_requests`
+    # e grava `finalize_reboot_interrupted_task`. Matar antes fazia `process.poll()`
+    # retornar código de erro no monitor e pular tanto o cleanup quanto FAILED_BY_REBOOT.
     if active_futures:
         _, not_done = futures_wait(active_futures, timeout=SHUTDOWN_GRACE_SECONDS)
         if not_done:
             logger.warning(
-                "%d tarefa(s) não encerraram em %ss; abandonando no shutdown.",
+                "%d tarefa(s) não encerraram em %ss; forçando encerramento no shutdown.",
                 len(not_done),
                 SHUTDOWN_GRACE_SECONDS,
             )
+            _terminate_active_processes()
     executor.shutdown(wait=False, cancel_futures=True)
     # O pool de notificações também precisa ser encerrado explicitamente: suas
     # threads não são daemon e o `atexit` do concurrent.futures faria join delas

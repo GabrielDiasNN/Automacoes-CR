@@ -10,6 +10,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+_QUALITY_BLOCKED_CODES = frozenset(
+    {
+        "quality_blocked",
+        "quality_missing_required_columns",
+        "quality_critical_nulls",
+        "quality_duplicate_keys",
+    }
+)
+
 
 def _build_issue(
     *,
@@ -223,7 +232,7 @@ def _primary_issue_for_period(
                 action_hint="Revisar os avisos de qualidade do período antes de ampliar o uso analítico.",
             ),
         )
-    if oracle.get("oracle_timeout_applied") is False:
+    if oracle.get("oracle_timeout_applied") is False and oracle.get("queue") is not True:
         return (
             "attention",
             "oracle_timeout_unapplied",
@@ -252,11 +261,10 @@ def _primary_issue_for_period(
 def _snapshot_state_for_reason(reason_code: str) -> str:
     if reason_code == "snapshot_missing":
         return "missing"
-    if reason_code in {
-        "snapshot_invalid",
-        "historico_partial_failure",
-        "quality_blocked",
-    }:
+    if (
+        reason_code in {"snapshot_invalid", "historico_partial_failure"}
+        or reason_code in _QUALITY_BLOCKED_CODES
+    ):
         return "invalid"
     if reason_code == "snapshot_stale":
         return "stale"
@@ -301,7 +309,7 @@ def _build_secondary_issues(
                 action_hint="Reexecutar o refresh e confirmar a escrita no histórico SQLite antes de confiar no drill-down.",
             )
         )
-    if quality_status == "blocked" and primary_reason != "quality_blocked":
+    if quality_status == "blocked" and primary_reason not in _QUALITY_BLOCKED_CODES:
         issues.append(
             _quality_blocked_issue(
                 period=period,
@@ -322,6 +330,7 @@ def _build_secondary_issues(
         )
     if (
         oracle.get("oracle_timeout_applied") is False
+        and oracle.get("queue") is not True
         and primary_reason != "oracle_timeout_unapplied"
     ):
         issues.append(

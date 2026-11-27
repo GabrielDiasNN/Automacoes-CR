@@ -131,7 +131,7 @@ def cancel_after(
             if encerrado:
                 return
             fired.set()
-        with contextlib.suppress(oracledb.Error):  # cancelamento best effort
+        with contextlib.suppress(Exception):  # cancelamento best effort (inclui sessão já derrubada)
             connection.cancel()
 
     timer = threading.Timer(max(seconds, _MIN_WAIT_SECONDS), fire)
@@ -148,13 +148,13 @@ def cancel_after(
         # Se `fire` já estava rodando, espera o `cancel()` terminar antes de a
         # conexão ser fechada: `cancel` e `close` concorrentes não são seguros.
         timer.join(CANCEL_GRACE_SECONDS)
-        if concluiu and fired.is_set():
+        if concluiu and fired.is_set() and not timer.is_alive():
             # O prazo estourou no instante em que a chamada terminava: o cancel chegou
             # numa conexão já ociosa. Um ping consome o break pendente, senão a próxima
             # chamada na mesma conexão (ex.: pool do MCP) receberia ORA-01013.
             ping = getattr(connection, "ping", None)
             if ping is not None:
-                with contextlib.suppress(oracledb.Error):
+                with contextlib.suppress(oracledb.Error, AttributeError, RuntimeError):
                     ping()
 
 
@@ -172,6 +172,14 @@ class WatchdogOutcome:
     abandoned: bool = False
 
 
+def _cancelar_conexao_silencioso(target_connection: Any) -> None:
+    """Cancela a conexão em best effort sem propagar falha de sessão já derrubada."""
+    # Qualquer falha do cancel (não só oracledb.Error: com a sessão já derrubada o
+    # driver levanta AttributeError/RuntimeError) não pode mascarar o timeout.
+    with contextlib.suppress(Exception):
+        target_connection.cancel()
+
+
 def run_with_cancel(
     fn: Callable[[], Any],
     connection: Callable[[], Any | None],
@@ -184,8 +192,8 @@ def run_with_cancel(
     `connection()` (pode ser None se `fn` ainda não conectou).
 
     Com `owns_connection`, a própria thread fecha a conexão ao terminar, sob o
-    mesmo lock do `cancel()`: `fn` não deve fechá-la (cancel e close
-    concorrentes não são seguros).
+    mesmo lock de estado: `fn` não deve fechá-la (cancel e close concorrentes não
+    são seguros).
 
     `abandoned_event` é setado quando o prazo estoura; `fn` deve checá-lo logo
     após conectar e desistir em vez de executar sem watchdog.
@@ -218,13 +226,20 @@ def run_with_cancel(
         return outcome
     target_connection = connection()
     if target_connection is not None:
-        # Qualquer falha do cancel (não só oracledb.Error: com a sessão já derrubada o
-        # driver levanta AttributeError/RuntimeError) não pode mascarar o timeout: o
-        # chamador decide pelo `timed_out`. Cancelamento best effort.
-        with lock, contextlib.suppress(Exception):
-            if not state["done"]:
-                target_connection.cancel()
-        thread.join(CANCEL_GRACE_SECONDS)
+        with lock:
+            ja_concluiu = state["done"]
+        if not ja_concluiu:
+            cancel_thread = threading.Thread(
+                target=_cancelar_conexao_silencioso,
+                args=(target_connection,),
+                daemon=True,
+            )
+            cancel_thread.start()
+            cancel_thread.join(CANCEL_GRACE_SECONDS)
+            if not cancel_thread.is_alive():
+                thread.join(CANCEL_GRACE_SECONDS)
+        else:
+            thread.join(CANCEL_GRACE_SECONDS)
     with lock:
         abandoned = not state["done"]
         state["abandoned"] = abandoned

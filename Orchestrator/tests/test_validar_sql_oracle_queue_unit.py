@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from oracle_queue import (
+    OracleQueueBlockedError,
     OracleQueueError,
     OracleQueueTransientError,
 )
@@ -161,3 +162,34 @@ def test_prazo_da_fila_nao_e_repetido_pelo_retry(
 def test_transitorio_e_subclasse_de_oracle_queue_error() -> None:
     """Premissa dos `except`: a subclasse precisa vir antes da classe base."""
     assert issubclass(OracleQueueTransientError, OracleQueueError)
+
+
+def test_bloqueio_da_fila_vira_blocked_guard_sem_repetir(
+    monkeypatch: pytest.MonkeyPatch, dormidas: list[float]
+) -> None:
+    chamadas = _explicar_falso(
+        monkeypatch, [OracleQueueBlockedError("blocked", "DML proibido")]
+    )
+
+    resultado = _com_sentinela_da_fila(SQL, _opcoes())
+
+    assert resultado["status"] == "blocked_guard"
+    assert len(chamadas) == 1
+    assert dormidas == []
+
+
+def test_bloqueio_da_fila_no_smoke_vira_blocked_guard(
+    monkeypatch: pytest.MonkeyPatch, dormidas: list[float]
+) -> None:
+    _explicar_falso(monkeypatch, [1.0])
+    monkeypatch.setattr(vs, "verificar_objetos_fila", lambda *_a, **_k: None)
+
+    def falso_exec(*_a: Any, **_k: Any) -> Any:
+        raise OracleQueueBlockedError("blocked", "DML proibido")
+
+    monkeypatch.setattr(vs, "executar_consulta_fila", falso_exec)
+
+    resultado = _com_sentinela_da_fila(SQL, _opcoes(execute=True))
+
+    assert resultado["status"] == "blocked_guard"
+    assert dormidas == []

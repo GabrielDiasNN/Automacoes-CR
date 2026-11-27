@@ -112,6 +112,11 @@ LEFT JOIN SGTPRD.VW_SIS_SENHA_USUARIO VSU ON VSU.CODREDUSUARIO = LCR.USUARIO_ALT
 -- Semântica comprovada no SGT:
 --   GERAPECADESTINOOB: OB Mãe/Geradora (onde a peça foi gerada como destino)
 --   GERAPECAORIGEMOB:   OB Filha/Consumidora (onde a peça entrou como origem)
+--   OB.NUMERO_OB_PRINCIPAL é inativa (zerada); nunca usar para hierarquia.
+--   Reprocesso / troca de cor (ex.: OB 193261 -> 193263): a OB pai pode ser encerrada sem
+--   peças acabadas finais e sem fase 160; suas peças saem em GERAPECADESTINOOB (STPECAPRODUTO = 8)
+--   e entram em GERAPECAORIGEMOB da OB filha (TIPO_ORDEM = 6), onde ocorrem o acabamento e a qualidade.
+--   Divisões pré-acabamento já nascem como OBs independentes com peças cruas separadas em GERAPECAORIGEMOB.
 -- Continuidade (mesmo IDPECASPRODUTO):
 JOIN SGTPRD.GERAPECADESTINOOB DO ON DO.IDPECASPRODUTO = GPO.IDPECASPRODUTO AND DO.NUMERO_OB <> OB.NUMERO_OB
 -- Transformação / Desdobro de peças (IDPECASPRODUTOORIGEM -> IDPECASPRODUTO):
@@ -164,6 +169,19 @@ LEFT JOIN SGTPRD.DESTINO DEX
   ON DEX.DESTINO = OBF.DESTINO_RECEITA
 LEFT JOIN SGTPRD.GRUPO_DESTINO GDX 
   ON GDX.CODIGO_GRUPO = DEX.CODIGO_GRUPO
+
+-- 15. Testes Laboratoriais / Qualidade por Fase (ex.: Fase 160 - Gramatura)
+--   LAB_SOLIC.NUMERO_DOCUMENTO = OBF.NUMERO_OB AND LAB_SOLIC.SEQUENCIA_FASE = OBF.SEQUENCIA
+--   ÍNDICE LABSOLIC_INDORDEMSOLIC: (CDFILIAL, TIPOSTQUALIDADE, NUMERO_DOCUMENTO, SEQUENCIA_FASE...).
+--     Sempre que possível, filtre CDFILIAL e TIPOSTQUALIDADE = 0 (OB) para evitar Skip/Full Scan.
+--   LAB_SOLIC.STATUS (enum 151): 0=Planejada, 1=Programada, 2=Iniciada, 3=Finalizada, 4=Cancelada.
+--   LAB_SOLIC_LAUDOS.STATUS_EXECUCAO (enum 150): 0=Planejar, 1=Programado, 2=Iniciado, 3=Finalizado (VALOR_RESULTADO válido).
+--   LAB_SOLIC_LAUDOS.INDICADOR_APROVACAO (enum 351): 0=Sem Aval., 1=Reprov. Auto, 2=Aprov. Auto, 3=Reprov. Manual, 4=Aprov. Manual, 5=Aguardando.
+--   Principais IDITEMTESTE (ITEM_TESTE): 1=GRAMATURA, 3=ENCOLHIMENTO LARGURA, 4=TORÇÃO, 5=CONF. COR (MOLHADO),
+--     6=ENCOLHIMENTO COMPRIMENTO, 8=LARGURA ACABADA, 9=LARGURA CRUA, 15=AVALIAR FELPA, 17=ALTURA ACABADA.
+--   OB.TIPO_ORDEM (enum 480): 0=Produção, 2=Receita simples, 6=Ordem de reprocesso, 7=Limpeza Maquina.
+LEFT JOIN SGTPRD.LAB_SOLIC LS ON LS.NUMERO_DOCUMENTO = OBF.NUMERO_OB AND LS.SEQUENCIA_FASE = OBF.SEQUENCIA AND LS.TIPOSTQUALIDADE = 0
+LEFT JOIN SGTPRD.LAB_SOLIC_LAUDOS LSL ON LSL.IDLAB_SOLIC = LS.IDLAB_SOLIC AND LSL.IDITEMTESTE = 1
 ```
 
 ## Volumes de Produção
@@ -180,6 +198,8 @@ LEFT JOIN SGTPRD.GRUPO_DESTINO GDX
 | `UP_ORDEM_MVTO`        | 1.5M   | Filtrar por NUMEROORDEMREAL                         |
 | `MOVTO_RECEITA`        | 1.3M   | Filtrar por NUMEROORDEM                             |
 | `OB_FASES`             | 1.3M   | Filtrar por NUMERO_OB                               |
+| `LAB_SOLIC_LAUDOS`     | 1.19M  | Filtrar por `IDLAB_SOLIC` ou `(STATUS_EXECUCAO, CDFILIAL, DTPRODFIM)` |
+| `LAB_SOLIC`            | 316K   | Filtrar por `(CDFILIAL, TIPOSTQUALIDADE, NUMERO_DOCUMENTO)` |
 | `LOTE_ITENS_NOTA_ENTR` | 275K   | Lotes de NF de entrada. `STFINALIZACAO = 2` indica finalizado (peças geradas)       |
 | `OB`                   | 177K   | Tabela mestre de OB (OB_EXPEDICAO NÃO existe). Filtrar por `STATUS` ou data |
 | `ITENS_ESTOQUE`     | 24.9K  | Master pequeno, JOIN seguro                         |

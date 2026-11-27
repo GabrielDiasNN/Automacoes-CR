@@ -125,7 +125,11 @@ def _summary_from_periods(periods: dict[str, dict[str, Any]]) -> dict[str, int]:
             summary["stale_periods"] += 1
         if payload.get("snapshot_state") == "invalid":
             summary["invalid_periods"] += 1
-        if (payload.get("oracle") or {}).get("oracle_timeout_applied") is False:
+        oracle_meta = payload.get("oracle") or {}
+        if (
+            oracle_meta.get("oracle_timeout_applied") is False
+            and oracle_meta.get("queue") is not True
+        ):
             summary["timeout_unapplied_periods"] += 1
         if payload.get("historico_write_status") == "partial_failure":
             summary["partial_failure_periods"] += 1

@@ -20,7 +20,7 @@ from ..constants import ORCHESTRATOR_VERSION, WORKER_MAX_CONCURRENCY_PADRAO
 from ..database import get_db_size_mb, get_schema_version, get_wal_size_mb
 from ..runtime import get_allowed_origins, get_worker_max_concurrency, scheduler
 from ..timezone import get_now_local
-from .oracle_queue_health import collect_oracle_queue_health
+from .oracle_queue_health import collect_oracle_queue_health, is_oracle_queue_degraded
 
 logger = logging.getLogger("orchestrator")
 
@@ -98,15 +98,7 @@ def build_health_payload(
         db.query(models.Execution).filter(models.Execution.status == "PENDING").count()
     )
     oracle_queue_worker = collect_oracle_queue_health()
-    oracle_queue_degraded = bool(
-        oracle_queue_worker
-        and oracle_queue_worker.get("enabled")
-        and (
-            not oracle_queue_worker.get("reachable")
-            or not oracle_queue_worker.get("alive")
-            or oracle_queue_worker.get("oracle_ok") is False
-        )
-    )
+    oracle_queue_degraded = is_oracle_queue_degraded(oracle_queue_worker)
     overall = "healthy"
     if db_status != "online" or not scheduler.running:
         overall = "unhealthy"

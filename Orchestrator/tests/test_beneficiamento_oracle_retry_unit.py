@@ -411,9 +411,68 @@ def test_execute_query_carrega_dotenv_antes_de_ler_driver_mode_queue(
 
     monkeypatch.setattr(oracle, "queue_execute_query", fila_falsa)
 
-    res = oracle.execute_query("SELECT 42 FROM DUAL", max_rows=10)
+    res = oracle.execute_query("SELECT 42 FROM DUAL", max_rows=10, oracle_timeout_ms=18000)
     assert res.rows == [(42,)]
     assert res.metadata["queue"] is True
+    assert isinstance(res.metadata["oracle_timeout_warning"], str)
+    assert res.metadata["oracle_timeout_warning"] == ""
     assert len(chamadas_fila) == 1
     assert chamadas_fila[0]["options"] is not None
     assert chamadas_fila[0]["options"].max_rows == 10
+    assert chamadas_fila[0]["options"].command_timeout_seconds == 18
+
+
+def test_readonly_credentials_preserva_override_do_processo_sobre_dotenv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".env").write_text(
+        "ORACLE_READONLY_USER=env_file_user\n"
+        "ORACLE_READONLY_PASSWORD=env_file_pwd\n"
+        "ORACLE_CONNECT_STRING=env_file_dsn\n"
+        "ORACLE_DRIVER_MODE=queue\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(oracle, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("ORACLE_READONLY_USER", "process_user")
+    monkeypatch.setenv("ORACLE_READONLY_PASSWORD", "process_pwd")
+    monkeypatch.setenv("ORACLE_CONNECT_STRING", "process_dsn")
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "thick")
+
+    creds = acessar_privado(oracle, "_readonly_credentials")()
+
+    assert creds.user == "process_user"
+    assert creds.password == "process_pwd"
+    assert creds.dsn == "process_dsn"
+    assert oracle.get_driver_mode() == "thick"
+
+
+@pytest.mark.parametrize(
+    "raw_names",
+    [
+        ["A", "A", "A__2"],
+        ["A__2", "A", "A"],
+        ["COL", "COL__2", "COL", "COL__2"],
+    ],
+)
+def test_make_unique_names_evita_colisao_com_sufixo_duplo(
+    raw_names: list[str],
+) -> None:
+    unique_names, _duplicates = acessar_privado(oracle, "_make_unique_names")(raw_names)
+    assert len(unique_names) == len(raw_names)
+    assert len(unique_names) == len(set(unique_names))
+
+
+def test_metadata_nativa_sem_cursor_description_tem_schema_unificado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conexao = _ConexaoSemCallTimeout(bloqueia=False)
+    conexao.cursor_falso.description = None  # type: ignore[assignment]
+    monkeypatch.setattr(oracle, "connect_readonly", lambda: conexao)
+
+    resultado = oracle.execute_query("SELECT 1", wall_clock_budget_seconds=5, max_rows=50)
+
+    assert resultado.rows == []
+    assert resultado.metadata["oracle_watchdog_applied"] is True
+    assert resultado.metadata["max_rows_limit"] == 50
+    assert resultado.metadata["queue"] is False
+    assert isinstance(resultado.metadata["oracle_timeout_warning"], str)

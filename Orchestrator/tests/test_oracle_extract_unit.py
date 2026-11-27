@@ -444,3 +444,32 @@ def test_resolve_oracle_credentials_modo_invalido_loga_e_retorna_none(
     )
     assert res is None
     assert any(lvl == "ERROR" and "bridge" in msg for lvl, msg in mensagens)
+
+
+def test_fetch_all_fecha_conexao_e_cursor_mesmo_se_instrumentacao_falhar(
+    mock_oracle_connection: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn = mock_oracle_connection.return_value
+    monkeypatch.setattr(
+        oracle_extract,
+        "instrument_oracle_session",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("falha oci")),
+    )
+    with pytest.raises(RuntimeError, match="falha oci"):
+        fetch_all(_fake_credentials(), "SELECT 1", "EXEC-ERR", _noop_log)
+    conn.__exit__.assert_called_once()
+
+
+def test_registrar_saude_wan_suprime_erro_de_log_no_except(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        oracle_extract,
+        "probe_wan_health",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("falha probe")),
+    )
+
+    def log_quebrado(*_a: Any, **_k: Any) -> None:
+        raise OSError("disco cheio")
+
+    _registrar_saude_wan("h:1521/dbprd", 1000, log_quebrado, "EXEC-WAN")

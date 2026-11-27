@@ -17,7 +17,6 @@ class ColumnProfile:
     null: int = 0
     distinct_values: set[str] = field(default_factory=set)
     sample_values: list[str] = field(default_factory=list)
-    numeric_values: list[float] = field(default_factory=list)
     min_value: Any = None
     max_value: Any = None
 
@@ -31,8 +30,6 @@ class ColumnProfile:
             self.sample_values.append(normalized)
         if len(self.distinct_values) < 200000:
             self.distinct_values.add(normalized)
-        if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
-            self.numeric_values.append(float(value))
         if isinstance(value, (datetime, date, int, float, Decimal, str)):
             if self.min_value is None or value < self.min_value:
                 self.min_value = value

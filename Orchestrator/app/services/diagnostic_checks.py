@@ -365,6 +365,9 @@ def check_oracle_queue_worker_health(
     if not oracle_q or not oracle_q.get("enabled"):
         return findings
 
+    machine = str(oracle_q.get("machine") or "").strip()
+    target_host = f"servidor TSplus ({machine})" if machine else "servidor TSplus"
+
     if not oracle_q.get("reachable"):
         add_finding(
             findings,
@@ -388,7 +391,10 @@ def check_oracle_queue_worker_health(
             "oracle_queue",
             f"Worker Oracle do TSplus está offline{age_txt}.",
             {
-                "action_hint": "Iniciar ou reiniciar INICIAR_WORKER.bat no servidor TSplus (10.62.0.3).",
+                "action_hint": (
+                    f"Iniciar ou reiniciar INICIAR_WORKER.bat no {target_host} "
+                    "e conferir ORACLE_QUEUE_DIR."
+                ),
                 "impact": "Extrações Oracle não serão atendidas até o retorno do worker; falhas ficarão elegíveis para auto-recuperação.",
                 "priority": 1,
             },
@@ -402,7 +408,10 @@ def check_oracle_queue_worker_health(
             "oracle_queue",
             "Worker Oracle no TSplus reportou perda de conexão com o banco Oracle PRD.",
             {
-                "action_hint": "Verificar conectividade TCP entre TSplus (10.62.0.3) e Oracle PRD (10.62.0.2:1521).",
+                "action_hint": (
+                    f"Verificar conectividade TCP entre o {target_host} e o banco "
+                    "Oracle PRD (ORACLE_CONNECT_STRING / ORACLE_QUEUE_DIR)."
+                ),
                 "impact": "Consultas na fila podem falhar até a reconexão do worker.",
                 "priority": 2,
             },

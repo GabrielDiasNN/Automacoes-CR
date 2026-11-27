@@ -735,3 +735,131 @@ def test_falha_ao_configurar_o_cursor_devolve_a_conexao(ferramenta: str) -> None
 
     assert resultado["error"] is True
     assert mgr.release_connection.called or mgr.discard_connection.called
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 1 FROM tabela /* a( */ FOR UPDATE /* ) AS ( */",
+        "SELECT 1 FROM tabela /* a( */ ; DELETE FROM t /* ) AS ( */",
+        "WITH a (b FOR UPDATE) AS (SELECT 1 FROM DUAL) SELECT * FROM a",
+        "WITH a (fn(1)) AS (SELECT 1 FROM DUAL) SELECT * FROM a",
+        "SELECT 1 FROM t WHERE a (b) AS (SELECT 1 FROM DUAL)",
+    ],
+)
+def test_guarda_bloqueia_bypass_cte_via_comentario_ou_ancoragem(sql: str) -> None:
+    permitido, _ = mcp_server.validate_read_only(sql)
+    assert permitido is False
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "WITH a (c1, c2) AS (SELECT 1, 2 FROM DUAL), b (c3) AS (SELECT c1 FROM a) SELECT c3 FROM b",
+        "WITH a (c1 /* comentario */, c2) AS (SELECT 1, 2 FROM DUAL) SELECT c1 FROM a",
+    ],
+)
+def test_guarda_permite_ctes_validas_com_lista_de_colunas(sql: str) -> None:
+    assert mcp_server.validate_read_only(sql) == (True, "")
+
+
+def test_blob_com_metodo_size_reporta_bytes_e_trata_erro_driver() -> None:
+    class _BlobMetodo:
+        def size(self) -> int:
+            return 456
+
+        def read(self, *_args: Any, **_kwargs: Any) -> Any:
+            raise AssertionError("BLOB não deve ser lido")
+
+    class _BlobMetodoErro:
+        def size(self) -> int:
+            raise oracledb.DatabaseError("DPY-1001: not connected")
+
+        def read(self, *_args: Any, **_kwargs: Any) -> Any:
+            raise AssertionError("BLOB não deve ser lido")
+
+    for lob, esperado in (
+        (_BlobMetodo(), "<blob 456 bytes>"),
+        (_BlobMetodoErro(), "<blob>"),
+    ):
+        cursor = _cursor_com_coluna(oracledb.DB_TYPE_BLOB, lob)
+        conn = _conexao_com_cursor(cursor)
+        mgr = _mgr_com_conexao(conn)
+        res = OracleMcpTools(mgr, _config()).execute_sql(
+            "SELECT 1 FROM DUAL", output_format="json"
+        )
+        assert res["data"][0]["C"] == esperado
+
+
+def test_acquire_e_release_nao_seguram_lock_concorrente(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    liberado = threading.Event()
+    entrou_acquire = threading.Event()
+    conn_pool = MagicMock(name="conn_pool")
+
+    class _PoolBloqueante:
+        def acquire(self) -> Any:
+            entrou_acquire.set()
+            assert liberado.wait(timeout=3), "deadlock: release_connection travado"
+            return conn_pool
+
+        def release(self, _conn: Any) -> None:
+            liberado.set()
+
+        def close(self, force: bool = True) -> None:
+            _ = force
+
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "auto")
+    monkeypatch.setattr(
+        mcp_server, "connect_adaptive", MagicMock(return_value=MagicMock())
+    )
+    monkeypatch.setattr("oracledb.create_pool", lambda **_k: _PoolBloqueante())
+    cfg = OracleConfig(**{**_config().__dict__, "dsn": "host-teste:1521/dbprd"})
+    mgr = OracleConnectionManager(cfg)
+    try:
+        resultado: list[Any] = []
+        t = threading.Thread(
+            target=lambda: resultado.append(mgr.acquire_connection())
+        )
+        t.start()
+        assert entrou_acquire.wait(timeout=3)
+        mgr.release_connection(MagicMock(name="outra_conn"))
+        t.join(timeout=3)
+        assert not t.is_alive()
+        assert resultado == [conn_pool]
+    finally:
+        mgr.close()
+
+
+def test_release_connection_ignora_conexao_dedicada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn_dedicada = MagicMock(name="dedicada")
+    monkeypatch.setattr(
+        mcp_server, "connect_within", lambda _fn, seconds: conn_dedicada
+    )
+    mgr = OracleConnectionManager(_config())
+    acessar_privado(mgr, "_marcar_pool_falho")()
+    assert mgr.acquire_connection() is conn_dedicada
+
+    pool_falso = MagicMock(name="pool_posterior")
+    monkeypatch.setattr(mgr, "_pool", pool_falso)
+    mgr.release_connection(conn_dedicada)
+
+    pool_falso.release.assert_not_called()
+
+
+def test_desfazer_plano_fecha_cursor_em_erro_inesperado_do_rollback() -> None:
+    cursor = MagicMock(name="cursor")
+    conn = MagicMock(name="conexao")
+    conn.rollback.side_effect = RuntimeError("erro inesperado")
+    mgr = _mgr_com_conexao(conn)
+
+    with pytest.raises(RuntimeError, match="erro inesperado"):
+        acessar_privado(OracleMcpTools(mgr, _config()), "_desfazer_plano")(
+            conn, cursor, None, threading.Event()
+        )
+
+    cursor.close.assert_called_once()
+    mgr.discard_connection.assert_called_once_with(conn)

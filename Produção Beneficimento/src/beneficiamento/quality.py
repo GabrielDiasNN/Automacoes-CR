@@ -111,8 +111,9 @@ def assess_quality(
     warnings: list[str] = []
     checks: list[dict[str, Any]] = []
 
-    if not report.get("total_rows"):
-        critical_issues.append("consulta sem linhas retornadas")
+    has_rows = int(report.get("total_rows") or 0) > 0
+    if not has_rows:
+        warnings.append("consulta sem linhas retornadas")
     if missing_required:
         critical_issues.append(
             "colunas obrigatorias ausentes: " + ", ".join(missing_required)
@@ -179,7 +180,14 @@ def assess_quality(
         }
     )
 
-    status = "blocked" if critical_issues else ("attention" if warnings else "ok")
+    if critical_issues:
+        status = "blocked"
+    elif not has_rows:
+        status = "no_data"
+    elif warnings:
+        status = "attention"
+    else:
+        status = "ok"
     return {
         "variant": variant,
         "status": status,

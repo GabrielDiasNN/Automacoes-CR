@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from guard_sql import (
     canonical_guard_file,
+    extrair_consulta_verificacao,
     ler_veredito,
     so_chamada_de_funcao,
     verificar_objetos,
@@ -50,6 +51,7 @@ from oracle_extract import (
     resolve_oracle_credentials,
 )
 from oracle_queue import (
+    OracleQueueBlockedError,
     OracleQueueError,
     OracleQueueTransientError,
     OracleQueueWorkerOfflineError,
@@ -372,38 +374,40 @@ def _run_with_watchdog(
 
     def target() -> None:
         cursor = connection.cursor()
-        started = time.perf_counter()
-        cursor.parse(sql)
-        parse_ms = round((time.perf_counter() - started) * 1000, 1)
-        result.update({"parse": "pass", "parse_ms": parse_ms})
-        if binds is None:
-            return
-        motivo = verificar_objetos(cursor, consulta_verificacao)
-        if motivo is not None:
-            result.update({"smoke": "blocked_custom_function", "error": motivo})
-            return
-
-        # Executa o SQL original (embrulhar em SELECT * FROM (...) dava
-        # ORA-00918 com colunas duplicadas e quebrava WITH FUNCTION) e
-        # busca so a primeira linha.
-        cursor.prefetchrows = 1
-        cursor.arraysize = 1
-        started = time.perf_counter()
         try:
+            started = time.perf_counter()
+            cursor.parse(sql)
+            parse_ms = round((time.perf_counter() - started) * 1000, 1)
+            result.update({"parse": "pass", "parse_ms": parse_ms})
+            if binds is None:
+                return
+            motivo = verificar_objetos(cursor, consulta_verificacao)
+            if motivo is not None:
+                result.update({"smoke": "blocked_custom_function", "error": motivo})
+                return
+
+            # Executa o SQL original (embrulhar em SELECT * FROM (...) dava
+            # ORA-00918 com colunas duplicadas e quebrava WITH FUNCTION) e
+            # busca so a primeira linha.
+            cursor.prefetchrows = 1
+            cursor.arraysize = 1
+            started = time.perf_counter()
             cursor.execute(sql, binds)
             description = cursor.description or []
             rows = cursor.fetchmany(1)
+            execute_ms = round((time.perf_counter() - started) * 1000, 1)
+            result.update(
+                {
+                    "smoke": "pass",
+                    "execute_ms": execute_ms,
+                    "rows": len(rows),
+                    "columns": len(description),
+                }
+            )
         finally:
-            cursor.close()
-        execute_ms = round((time.perf_counter() - started) * 1000, 1)
-        result.update(
-            {
-                "smoke": "pass",
-                "execute_ms": execute_ms,
-                "rows": len(rows),
-                "columns": len(description),
-            }
-        )
+            if hasattr(cursor, "close"):
+                with contextlib.suppress(oracledb.Error):
+                    cursor.close()
 
     outcome = run_with_cancel(target, lambda: connection, timeout)
     if outcome.timed_out:
@@ -478,6 +482,14 @@ def _oracle_smoke_queue(
     except OracleQueueTransientError:
         # Repetida por `_oracle_stage_with_retry`, como queda de sessão.
         raise
+    except OracleQueueBlockedError as exc:
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "blocked_guard",
+            "status": "blocked_guard",
+            "error": _error_summary(exc),
+        }
     except OracleQueueError as exc:
         return {
             "parse": "pass",
@@ -506,6 +518,14 @@ def _verificar_objetos_stage_queue(
     except OracleQueueTransientError:
         # Repetida por `_oracle_stage_with_retry`, como queda de sessão.
         raise
+    except OracleQueueBlockedError as exc:
+        return {
+            "parse": "pass",
+            "parse_ms": parse_ms,
+            "smoke": "blocked_guard",
+            "status": "blocked_guard",
+            "error": _error_summary(exc),
+        }
     except OracleQueueError as exc:
         return {
             "parse": "pass",
@@ -542,6 +562,8 @@ def _oracle_stage_queue(
     except OracleQueueTransientError:
         # Repetida por `_oracle_stage_with_retry`, como queda de sessão.
         raise
+    except OracleQueueBlockedError as exc:
+        return {"status": "blocked_guard", "error": _error_summary(exc)}
     except OracleQueueError as exc:
         return {"parse": "fail", "status": "oracle_error", "error": _error_summary(exc)}
 
@@ -713,11 +735,11 @@ def _veredito_para_oracle(
 def consulta_verificacao_do_guard(guard_output: str) -> str | None:
     """`consulta_verificacao` do veredito (exit 0), a rodar antes de executar o SQL.
 
-    Levanta ValueError se a saída não for o JSON do guard: sem ela não há como provar
-    que nenhum nome é função, e quem chama não executa (fail-closed).
+    Levanta ValueError se a saída não for o JSON do guard ou se o número de
+    objetos exceder `LIMITE_NOMES_VERIFICADOS` (fail-closed).
     """
-    consulta = ler_veredito(guard_output).get("consulta_verificacao")
-    return str(consulta) if consulta else None
+    consulta: str | None = extrair_consulta_verificacao(ler_veredito(guard_output))
+    return consulta
 
 
 def _rotulo_do_arquivo(path: Path) -> str:

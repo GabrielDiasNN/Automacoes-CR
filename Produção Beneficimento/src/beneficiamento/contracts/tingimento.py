@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import parse_iso_date, round_or_zero as _round, safe_strip as _safe_strip
-from ..data.schema import init_db
+from ..data.schema import open_historico_connection
 
 _CODIGO_FASE_TINGIMENTO = 40
 
@@ -296,9 +296,7 @@ def obter_tingimento_historico(  # pylint: disable=too-many-locals
     filtros: dict[str, Any], db_path: Path | str | None = None
 ) -> dict[str, Any]:
     """Monta o painel dedicado de Tingimento (escopo fixo CODIGO_FASE=40)."""
-    path = init_db(db_path)
-    with sqlite3.connect(path) as conn:
-        conn.row_factory = sqlite3.Row
+    with open_historico_connection(db_path, row_factory=sqlite3.Row) as conn:
         cursor = conn.cursor()
         dt_inicio, dt_fim, max_data_fim = _resolve_window(cursor, filtros)
         where_sql, params = _build_where(dt_inicio, dt_fim)

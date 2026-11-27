@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
@@ -75,7 +76,7 @@ def gravar_snapshot(
     hr.write_json_atomic(destino_json, payload)
 
     db_path = base / "promovidas.db"
-    with sqlite3.connect(str(db_path), timeout=15.0) as conn:
+    with contextlib.closing(sqlite3.connect(str(db_path), timeout=15.0)) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(_SCHEMA_SQL)
         conn.execute(

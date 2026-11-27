@@ -85,6 +85,7 @@ def test_prazo_global_estourado_em_enforce_queue_deadline_sai_com_7(
 
 
 def test_erro_configuracao_value_error_e_not_supported_saem_com_5() -> None:
-    """ValueError (ex.: modo inválido) e oracledb.NotSupportedError são determinísticos (5)."""
+    """ValueError, TypeError (ex.: bind com tzinfo) e NotSupportedError são determinísticos (5)."""
     assert classify_oracle_exit_code(ValueError("ORACLE_DRIVER_MODE inválido")) == 5
+    assert classify_oracle_exit_code(TypeError("datetime com fuso não suportado")) == 5
     assert classify_oracle_exit_code(oracledb.NotSupportedError("DPY-3015")) == 5

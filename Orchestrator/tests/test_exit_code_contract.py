@@ -10,6 +10,7 @@ como comportamento normal, caía no default ERROR e gerava falso incidente.
 Este teste falha quando um `run.ps1` passa a emitir um código ausente do mapa.
 """
 
+import ast
 import re
 from pathlib import Path
 
@@ -59,6 +60,77 @@ def _automation_run_scripts() -> list[Path]:
         manifest.parent / "run.ps1"
         for manifest in PROJECT_ROOT.glob("*/automation.manifest.json")
         if (manifest.parent / "run.ps1").is_file()
+    )
+
+
+def _python_exit_constants(script: Path) -> dict[str, int]:
+    """Extrai constantes inteiras `EXIT_*` declaradas no topo do módulo Python."""
+    tree = ast.parse(script.read_text(encoding="utf-8-sig"), filename=str(script))
+    constants: dict[str, int] = {}
+    for node in tree.body:
+        target_name: str | None = None
+        value_node: ast.AST | None = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            if isinstance(node.targets[0], ast.Name):
+                target_name = node.targets[0].id
+                value_node = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target_name = node.target.id
+            value_node = node.value
+        if (
+            target_name
+            and target_name.startswith("EXIT_")
+            and isinstance(value_node, ast.Constant)
+            and isinstance(value_node.value, int)
+            and not isinstance(value_node.value, bool)
+        ):
+            constants[target_name] = value_node.value
+    return constants
+
+
+def _automation_python_runners() -> list[Path]:
+    """`run_*.py` das automações registradas (as que têm manifesto)."""
+    runners: list[Path] = []
+    for manifest in sorted(PROJECT_ROOT.glob("*/automation.manifest.json")):
+        runners.extend(sorted(manifest.parent.glob("run_*.py")))
+    return runners
+
+
+@pytest.mark.unitario
+def test_hub_runner_define_constantes_exit() -> None:
+    """Guarda contra o contrato passar sem encontrar constantes `EXIT_*`."""
+    hub_runner = PROJECT_ROOT / "lib" / "python" / "hub_runner.py"
+    constants = _python_exit_constants(hub_runner)
+    assert constants, f"Nenhuma constante EXIT_* encontrada em {hub_runner}"
+
+
+@pytest.mark.unitario
+def test_todo_exit_code_de_hub_runner_esta_mapeado() -> None:
+    """Toda constante `EXIT_*` de `lib/python/hub_runner.py` deve constar no EXIT_CODE_MAP."""
+    hub_runner = PROJECT_ROOT / "lib" / "python" / "hub_runner.py"
+    constants = _python_exit_constants(hub_runner)
+    nao_mapeados = {
+        name: code for name, code in constants.items() if code not in EXIT_CODE_MAP
+    }
+    assert not nao_mapeados, (
+        f"{hub_runner.relative_to(PROJECT_ROOT)} declara constantes não mapeadas "
+        f"em EXIT_CODE_MAP: {nao_mapeados}"
+    )
+
+
+@pytest.mark.unitario
+@pytest.mark.parametrize(
+    "runner", _automation_python_runners(), ids=lambda p: p.parent.name
+)
+def test_todo_exit_code_de_runner_python_esta_mapeado(runner: Path) -> None:
+    """Constantes `EXIT_*` nos runners Python das automações devem constar no EXIT_CODE_MAP."""
+    constants = _python_exit_constants(runner)
+    nao_mapeados = {
+        name: code for name, code in constants.items() if code not in EXIT_CODE_MAP
+    }
+    assert not nao_mapeados, (
+        f"{runner.relative_to(PROJECT_ROOT)} declara constantes não mapeadas "
+        f"em EXIT_CODE_MAP: {nao_mapeados}"
     )
 
 

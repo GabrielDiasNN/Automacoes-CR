@@ -218,3 +218,50 @@ def test_guard_liberado_repassa_a_consulta_de_verificacao(
 
     assert _validate_one(f, None, _opcoes(f))["status"] == "validated"
     assert recebidas == ["SELECT v"]
+
+
+def test_mais_de_quinhentos_nomes_bloqueia_no_validador(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f = tmp_path / "a.sql"
+    f.write_text("SELECT 1 FROM dual", encoding="utf-8")
+    monkeypatch.setattr(vs, "ROOT", tmp_path)
+    veredito = json.dumps(
+        {
+            "classe": "leitura",
+            "verificar_objetos": [f"C{i}" for i in range(501)],
+            "consulta_verificacao": "SELECT v",
+        }
+    )
+    monkeypatch.setattr(vs, "_guard_texto", lambda _t, _g: (0, veredito))
+    chamadas = _sem_oracle(monkeypatch)
+
+    resultado = _validate_one(f, None, _opcoes(f))
+
+    assert resultado["status"] == "blocked_guard"
+    assert not chamadas
+
+
+def test_run_with_watchdog_fecha_cursor_em_parse_only_e_erro() -> None:
+    fechados: list[bool] = []
+
+    class _CursorFechavel(_Cursor):
+        def close(self) -> None:
+            fechados.append(True)
+
+    cursor_parse = _CursorFechavel([])
+    res_parse = _priv(vs, "_run_with_watchdog")(
+        _Conexao(cursor_parse), "select 1 from dual", 5, None
+    )
+    assert res_parse["parse"] == "pass"
+    assert fechados == [True]
+
+    class _CursorQueFalhaNoParse(_CursorFechavel):
+        def parse(self, _sql: str) -> None:
+            raise vs.oracledb.DatabaseError("ORA-00900")
+
+    res_erro = _priv(vs, "_run_with_watchdog")(
+        _Conexao(_CursorQueFalhaNoParse([])), "select 1 from dual", 5, {}
+    )
+    assert res_erro["parse"] == "fail"
+    assert fechados == [True, True]

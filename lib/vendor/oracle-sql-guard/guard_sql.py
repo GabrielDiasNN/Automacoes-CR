@@ -79,7 +79,7 @@ AS IN EXISTS NOT AND OR ON USING FROM JOIN SELECT WHERE BY OVER KEEP WITHIN GROU
 ANY ALL SOME THEN ELSE WHEN CASE BETWEEN LIKE DISTINCT PRIOR LATERAL APPLY TABLE PARTITION SUBPARTITION FOR
 HAVING UNION INTERSECT MINUS EXCEPT RETURNING MEASURES PATTERN DEFINE DIMENSION RULES MODEL NULLS IS OF
 MATCH_RECOGNIZE CONNECT START WITH ORDER SET NUMBER VARCHAR2 VARCHAR CHAR NCHAR NVARCHAR2 RAW TIMESTAMP INTERVAL
-FLOAT DECIMAL INTEGER DATE ESCAPE QID
+FLOAT DECIMAL INTEGER DATE ESCAPE
 """.split())
 # Leituras de pacotes comprovadamente sem efeito colateral.
 PERMITIDOS = re.compile(r"\bDBMS_XPLAN\s*\.\s*DISPLAY\w*\s*\(|\bDBMS_METADATA\s*\.\s*GET_\w+\s*\(", re.I)
@@ -89,6 +89,12 @@ CHAMADA_QUALIFICADA = re.compile(r"\b[A-Za-z_][\w$#]*\s*\.\s*[A-Za-z_][\w$#]*(\s
 # "GROUP BY (": as duas palavras saem da análise e a lista de conjuntos segue normalmente.
 # Roda sobre o texto já sem literais e comentários, então nunca casa dentro de string.
 GROUPING_SETS = re.compile(r"(?<![\w$#.])(GROUP\s+BY\s+)GROUPING\s+SETS\s*\(", re.I)
+# Cabeçalho de CTE cujo nome veio entre aspas ("MinhaCte" (c1, c2) AS (...)):
+# só normaliza `WITH QID (...) AS (` ou `, QID (...) AS (` após remoção de comentários.
+CTE_QID_LISTA = re.compile(
+    r"(?<![\w$#.])((?:WITH|,)\s+)QID\s*\(\s*[A-Za-z_][\w$#]*(?:\s*,\s*[A-Za-z_][\w$#]*)*\s*\)\s+AS\s*\(",
+    re.I,
+)
 
 
 
@@ -172,7 +178,7 @@ def remover_literais_e_comentarios(sql: str, citados: list[str] | None = None) -
                 sql, i = prefixo
                 n = len(sql)
                 c = sql[i]
-        if c in "qQ" and i + 2 < n and sql[i + 1] == "'" and (inicio_token or sql[i - 1] in "nN"):
+        if c in "qQ" and i + 2 < n and sql[i + 1] == "'" and inicio_token:
             i = _fim_literal_q(sql, i) + 2
             saida.append("''")
             continue
@@ -228,9 +234,28 @@ def _contar_argumentos(texto: str, abre: int) -> int:
     return argumentos
 
 
+def _fim_parenteses(texto: str, abre: int) -> int:
+    """Índice do ')' correspondente ao '(' em `abre` (ou `len(texto)` se não fechado)."""
+    profundidade = 0
+    for idx in range(abre, len(texto)):
+        caractere = texto[idx]
+        if caractere == "(":
+            profundidade += 1
+        elif caractere == ")":
+            profundidade -= 1
+            if profundidade == 0:
+                return idx
+    return len(texto)
+
+
 def normalizar_grouping_sets(texto: str) -> str:
     """Troca 'GROUP BY GROUPING SETS (' por 'GROUP BY (' e mais nada (ver GROUPING_SETS)."""
     return GROUPING_SETS.sub(r"\1(", texto)
+
+
+def normalizar_cte_qid(texto: str) -> str:
+    """Troca 'WITH QID (c1, c2) AS (' por 'WITH QID AS (' apenas em cabeçalho de CTE."""
+    return CTE_QID_LISTA.sub(r"\1QID AS (", texto)
 
 
 def _separar_instrucoes(limpo: str, corpo_plsql: bool) -> list[str]:
@@ -258,9 +283,18 @@ def _checar_bloqueios_de_leitura(
 def _checar_chamadas(instrucao: str, citados: list[str], resultado: dict[str, Any]) -> None:
     """Chamadas de função, pacote ou tipo capazes de efeito colateral ou de rede."""
     for dis in re.finditer(r"\bDBMS_XPLAN\s*\.\s*DISPLAY\w*\s*\(", instrucao, re.I):
-        if _contar_argumentos(instrucao, dis.end() - 1) >= 4:
+        abre = dis.end() - 1
+        fecha = _fim_parenteses(instrucao, abre)
+        args_texto = instrucao[abre + 1 : fecha]
+        if (
+            _contar_argumentos(instrucao, abre) >= 4
+            or "=>" in args_texto
+            or re.search(r"\bFILTER_PREDS\b", args_texto, re.I)
+        ):
             _bloquear(resultado, "chamada_sensivel")
-            resultado["motivos"].append("DBMS_XPLAN.DISPLAY com 4º argumento (filter_preds) executa SQL dinâmico")
+            resultado["motivos"].append(
+                "DBMS_XPLAN.DISPLAY com 4º argumento (filter_preds) ou parâmetro nomeado (=>) executa SQL dinâmico"
+            )
             break
     sem_permitidos = PERMITIDOS.sub(" ", instrucao)
     sensiveis = {m.group(1).upper() for m in PACOTES_SENSIVEIS.finditer(sem_permitidos)}
@@ -269,7 +303,11 @@ def _checar_chamadas(instrucao: str, citados: list[str], resultado: dict[str, An
         _bloquear(resultado, "chamada_sensivel")
         resultado["motivos"].append(f"pacote/tipo capaz de rede, escrita ou execução: {sorted(sensiveis)}")
     if CHAMADA_QUALIFICADA.search(sem_permitidos) or (
-        citados and re.search(r"QID\s*\.\s*(QID|[A-Za-z_]\w*)\s*\(", sem_permitidos)
+        citados
+        and re.search(
+            r"(?:QID|[A-Za-z_][\w$#]*)\s*\.\s*(?:QID|[A-Za-z_][\w$#]*)(?:\s*\.\s*(?:QID|[A-Za-z_][\w$#]*))?\s*\(",
+            sem_permitidos,
+        )
     ):
         _bloquear(resultado, "chamada_funcao")
         resultado["motivos"].append("chamada a função/procedimento de pacote ou schema (pode ter efeito colateral, ex.: autonomous transaction)")
@@ -373,7 +411,7 @@ def _anexar_verificacao(limpo: str, citados: list[str], resultado: dict[str, Any
         nome = token.upper()
         if nome not in PALAVRAS_SQL and nome not in FUNCOES_NATIVAS and nome not in PALAVRAS_ANTES_DE_PARENTESE and not nome.startswith(("V$", "GV$")):
             nomes.add(nome)
-    nomes |= {c.upper() for c in citados if re.fullmatch(r"[A-Za-z_][\w$#]*", c)}
+    nomes |= {c for c in citados if re.fullmatch(r"[A-Za-z_][\w$#]*", c)}
     if nomes:
         lista = ", ".join(f"'{n}'" for n in sorted(nomes)[:500])
         resultado["verificar_objetos"] = sorted(nomes)
@@ -395,7 +433,7 @@ def classificar(sql: str, exigir_limite: bool = False) -> dict[str, Any]:
         resultado["avisos"].append("hint PARALLEL: pode consumir muitos recursos do servidor; confirme com o usuário")
     citados: list[str] = []
     try:
-        limpo = normalizar_grouping_sets(remover_literais_e_comentarios(sql, citados))
+        limpo = normalizar_cte_qid(normalizar_grouping_sets(remover_literais_e_comentarios(sql, citados)))
     except ValueError as exc:
         return {**resultado, "classe": "invalido", "permitido": False, "motivos": [str(exc)]}
 

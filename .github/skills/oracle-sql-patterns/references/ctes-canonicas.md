@@ -186,6 +186,8 @@ GenealogiaCompleta AS (
 )
 ```
 
+> **Travessia descendente (`OB_MAE -> OB_FILHO`) e divisões:** ao partir de peças cruas/malharia (`GERAPECACRU -> GERAPECAORIGEMOB`) para rastrear acabamento ou testes de qualidade (fase `160`), inverta a direção da expansão para seguir `GERAPECADESTINOOB (OB_MAE) -> GERAPECAORIGEMOB (OB_FILHO)` (e `GERAPECAORIGEM` quando houver desdobro). Isso captura casos em que a OB pai é encerrada por reprocesso/troca de cor sem fase `160` (ex.: `193261 -> 193263`, `STPECAPRODUTO = 8`), transferindo o teste real para a OB filha (`TIPO_ORDEM = 6`). Divisões pré-acabamento já nascem como OBs independentes em `GERAPECAORIGEMOB`.
+
 ### CTE: Rastreabilidade de Lotes de Entrada e Classificação Física de Peças (Facção / Terceirização)
 
 Rastreia peças recebidas em lotes de facção (`LOTE_ITENS_NOTA_ENTR`) com apuração exata de quantidade gerada vs volumes e classificação física mutuamente exclusiva de cada peça.

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import parse_iso_date
-from .schema import COLUMN_NAMES, TABLE_NAME, init_db
+from .schema import COLUMN_NAMES, TABLE_NAME, open_historico_connection
 
 # Projecao tipada padrao: tudo menos o blob de auditoria.
 _TYPED_COLUMNS: tuple[str, ...] = tuple(
@@ -91,7 +91,6 @@ def buscar_historico(
 ) -> list[dict[str, Any]]:
     """Busca rapida por OB/produto/periodo lendo colunas tipadas indexadas."""
     limit = max(1, min(int(limit), _MAX_HISTORICO_LIMIT))
-    path = init_db(db_path)
     where_sql, params = _apply_filters(filtros)
     sql = (
         f"SELECT {_TYPED_SELECT}"
@@ -101,8 +100,7 @@ def buscar_historico(
     )
     params.append(limit)
 
-    with sqlite3.connect(path) as conn:
-        conn.row_factory = sqlite3.Row
+    with open_historico_connection(db_path, row_factory=sqlite3.Row) as conn:
         cursor = conn.execute(sql, params)
         return [
             _row_to_record(row, include_raw=include_raw) for row in cursor.fetchall()
@@ -115,7 +113,6 @@ def explicar_busca_historico(
     limit: int = 500,
 ) -> list[str]:
     """Retorna o ``EXPLAIN QUERY PLAN`` da busca tipada para validação operacional."""
-    path = init_db(db_path)
     where_sql, params = _apply_filters(filtros)
     sql = (
         f"EXPLAIN QUERY PLAN SELECT {_TYPED_SELECT}"  # nosec B608
@@ -123,7 +120,7 @@ def explicar_busca_historico(
         " ORDER BY DATA_FIM DESC, NUMERO_OB DESC, SEQ ASC LIMIT ?"
     )
     params.append(limit)
-    with sqlite3.connect(path) as conn:
+    with open_historico_connection(db_path, row_factory=None) as conn:
         return [str(row[3]) for row in conn.execute(sql, params).fetchall()]
 
 
@@ -133,7 +130,6 @@ def buscar_produtos(
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     """Autocomplete de produto: busca por codigo (CODIGO_KEY) ou descricao (DESCR_ITEM)."""
-    path = init_db(db_path)
     termo_norm = termo.strip()
     if not termo_norm:
         return []
@@ -145,8 +141,7 @@ def buscar_produtos(
         " AND (CODIGO_KEY LIKE ? OR DESCR_ITEM LIKE ?)"
         " ORDER BY produto LIMIT ?"
     )
-    with sqlite3.connect(path) as conn:
-        conn.row_factory = sqlite3.Row
+    with open_historico_connection(db_path, row_factory=sqlite3.Row) as conn:
         cursor = conn.execute(sql, [like, like, limit])
         return [
             {"codigo": row["codigo"], "produto": row["produto"] or "Sem descrição"}
@@ -158,8 +153,7 @@ def descrever_schema_historico(
     db_path: Path | str | None = None,
 ) -> dict[str, dict[str, str] | list[str]]:
     """Expoe metadados minimos do historico pela camada autorizada do dominio."""
-    path = init_db(db_path)
-    with sqlite3.connect(path) as conn:
+    with open_historico_connection(db_path, row_factory=None) as conn:
         columns = {
             row[1]: row[2]
             for row in conn.execute(f"PRAGMA table_info({TABLE_NAME})").fetchall()

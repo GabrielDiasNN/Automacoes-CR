@@ -14,6 +14,9 @@ from ..constants import (
     ACTION_CODE_SCHEDULER_RELOAD,
     ACTION_CODE_WORKER_RECOVER,
     ACTION_CODE_WORKER_WAKEUP,
+    BASELINE_STATUS_ATTENTION,
+    BASELINE_STATUS_HEALTHY,
+    BASELINE_STATUS_INCIDENT,
     DIAGNOSTIC_PENDING_STALLED_WARN_SECONDS,
     DIAGNOSTIC_RUNNING_OVER_RUNTIME_GRACE_SECONDS,
     DIAGNOSTIC_RUNNING_STALLED_WARN_SECONDS,
@@ -25,6 +28,7 @@ from ..constants import (
     ORCHESTRATOR_CONTRACT_VERSION,
     ORCHESTRATOR_VERSION,
     SEVERITY_ERROR,
+    SEVERITY_WARN,
     WORKER_MAX_CONCURRENCY_PADRAO,
 )
 from ..database import (
@@ -67,7 +71,10 @@ from .operational_baseline import (
     SinaisWorker,
     build_operational_baseline_summary,
 )
-from .oracle_queue_health import collect_oracle_queue_health
+from .oracle_queue_health import (
+    collect_oracle_queue_health,
+    is_oracle_queue_degraded,
+)
 from .system_history import build_trend_summary
 
 
@@ -481,8 +488,17 @@ def _analisar(db: Session, fund: _Fundamentos, fila: _Fila, scheduler: Any) -> _
 
 def _status_geral(findings: list[dict[str, Any]]) -> str:
     severity_rank = {"INFO": 0, "WARN": 1, "ERROR": 2}
+    # Falha isolada de dependência externa (`oracle_queue`) degrada a operação
+    # sem marcar o Orchestrator como "unhealthy" (alinhado com /health/full).
     max_severity = max(
-        (severity_rank.get(item["severity"], 0) for item in findings), default=0
+        (
+            1
+            if item.get("component") == "oracle_queue"
+            and item.get("severity") == SEVERITY_ERROR
+            else severity_rank.get(item["severity"], 0)
+            for item in findings
+        ),
+        default=0,
     )
     if max_severity == 2:
         return "unhealthy"
@@ -514,6 +530,9 @@ def _breaches_slo(
             getattr(worker_status, "pool_saturated_seconds", None) or 0.0
         )
         >= DIAGNOSTIC_WORKER_SATURATION_WARN_SECONDS,
+        "oracle_queue_degraded": is_oracle_queue_degraded(
+            analise["oracle_queue_worker"]
+        ),
     }
 
 
@@ -539,10 +558,14 @@ def _montar_resumo(
         schema_version=fund["schema_version"],
         oracle_queue_worker=analise["oracle_queue_worker"],
     )
+    has_unactionable_issue = any(
+        item.get("severity") in (SEVERITY_ERROR, SEVERITY_WARN)
+        for item in analise["findings"]
+    )
     recommended_action = (
         operator_actions[0]["action_code"]
         if operator_actions
-        else ACTION_CODE_WORKER_WAKEUP
+        else (None if has_unactionable_issue else ACTION_CODE_WORKER_WAKEUP)
     )
     return {
         "overall_status": overall_status,
@@ -555,11 +578,47 @@ def _montar_resumo(
     }
 
 
+def _oracle_queue_baseline_metric(
+    oracle_q: dict[str, Any],
+) -> schemas.OperationalBaselineMetric:
+    reachable = bool(oracle_q.get("reachable"))
+    alive = bool(oracle_q.get("alive"))
+    oracle_ok = oracle_q.get("oracle_ok")
+    age = oracle_q.get("age_seconds")
+    if not reachable:
+        status = BASELINE_STATUS_ATTENTION
+        current_value = "SMB inacessível"
+        detail = "Pasta da fila Oracle (SMB) está inacessível."
+    elif not alive:
+        status = BASELINE_STATUS_ATTENTION
+        current_value = "offline"
+        detail = "Worker Oracle do TSplus está offline; extrações em modo queue não serão atendidas."
+    elif oracle_ok is False:
+        status = BASELINE_STATUS_ATTENTION
+        current_value = "sem Oracle PRD"
+        detail = "Worker Oracle no TSplus reportou perda de conexão com o banco Oracle PRD."
+    else:
+        status = BASELINE_STATUS_HEALTHY
+        current_value = f"{age} s" if age is not None else "online"
+        detail = "Worker Oracle do TSplus ativo e conectado ao banco PRD."
+    return schemas.OperationalBaselineMetric(
+        code="oracle_queue_worker",
+        label="Worker Oracle (TSplus)",
+        status=status,
+        current_value=current_value,
+        attention_threshold="offline ou sem Oracle PRD",
+        incident_threshold=None,
+        detail=detail,
+        action_code=None,
+    )
+
+
 def _baseline_operacional(
     fund: _Fundamentos, fila: _Fila, analise: _Analise
 ) -> dict[str, Any]:
-    return build_operational_baseline_summary(
-        evaluated_at=get_now_local(),
+    evaluated_at = get_now_local()
+    summary = build_operational_baseline_summary(
+        evaluated_at=evaluated_at,
         worker=SinaisWorker(
             is_alive=fund["worker_status"].is_alive,
             last_ping_age_seconds=analise["last_ping_age_seconds"],
@@ -572,7 +631,30 @@ def _baseline_operacional(
             orphaned_running_count=len(fila["orphaned_running"]),
         ),
         wal_size_mb=fund["wal_size_mb"],
-    ).model_dump()
+    )
+    oracle_q = analise.get("oracle_queue_worker")
+    if oracle_q and oracle_q.get("enabled"):
+        metrics_list = [*summary.metrics, _oracle_queue_baseline_metric(oracle_q)]
+        attention_count = sum(
+            1 for item in metrics_list if item.status == BASELINE_STATUS_ATTENTION
+        )
+        incident_count = sum(
+            1 for item in metrics_list if item.status == BASELINE_STATUS_INCIDENT
+        )
+        status = BASELINE_STATUS_HEALTHY
+        if incident_count:
+            status = BASELINE_STATUS_INCIDENT
+        elif attention_count:
+            status = BASELINE_STATUS_ATTENTION
+        summary = schemas.OperationalBaselineSummary(
+            evaluated_at=evaluated_at,
+            status=status,
+            attention_count=attention_count,
+            incident_count=incident_count,
+            recommended_action=summary.recommended_action,
+            metrics=metrics_list,
+        )
+    return summary.model_dump()
 
 
 def build_diagnostics_payload(

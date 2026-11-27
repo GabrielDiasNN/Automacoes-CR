@@ -12,10 +12,16 @@ import sys
 from pathlib import Path
 from typing import Any, TypedDict, Unpack, cast
 
+import pytest
+from carregadores_modulos import acessar_privado
+
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "Produção Beneficimento" / "src"
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from beneficiamento import runner
+from beneficiamento.profile import profile_rows, summarize_profiles
+from beneficiamento.quality import DETAILED_REQUIRED_COLUMNS, assess_quality
 from beneficiamento.snapshot_aggregator import (
     _build_health_from_periods,
 )
@@ -315,3 +321,122 @@ def test_findings_reune_mensagem_de_cada_periodo_com_reason_message(
     payload = _build_health_from_periods(periods)
     assert any("Diário" in finding for finding in payload["findings"])
     assert any("Mensal" in finding for finding in payload["findings"])
+
+
+def test_modo_queue_nao_marca_oracle_timeout_unapplied(tmp_path: Path) -> None:
+    ctx = _context(
+        tmp_path,
+        oracle={"oracle_timeout_applied": False, "queue": True},
+    )
+    assert ctx["status"] == "healthy"
+    assert ctx["reason_code"] == "healthy"
+    assert [issue["code"] for issue in ctx["issues"]] == ["healthy"]
+
+    periods = {
+        "diario": _envelope(
+            tmp_path,
+            "diario",
+            "Diário",
+            oracle={"oracle_timeout_applied": False, "queue": True},
+        ),
+        "mensal": _envelope(
+            tmp_path,
+            "mensal",
+            "Mensal",
+            oracle={"oracle_timeout_applied": False, "queue": True},
+        ),
+    }
+    health = _build_health_from_periods(periods)
+    assert health["status"] == "healthy"
+    assert health["summary"]["timeout_unapplied_periods"] == 0
+
+    classify_refresh_status = acessar_privado(runner, "_classify_refresh_status")
+    assert (
+        classify_refresh_status(
+            {
+                "qualidade": {"status": "ok"},
+                "execucao_oracle": {
+                    "consulta_principal": {"oracle_timeout_applied": False, "queue": True}
+                },
+            },
+            history_write_failed=False,
+        )
+        == "ok"
+    )
+    assert (
+        classify_refresh_status(
+            {
+                "qualidade": {"status": "ok"},
+                "execucao_oracle": {
+                    "consulta_principal": {"oracle_timeout_applied": False, "queue": False}
+                },
+            },
+            history_write_failed=False,
+        )
+        == "attention"
+    )
+
+
+@pytest.mark.parametrize(
+    ("quality_payload", "expected_code"),
+    [
+        (
+            {"status": "blocked", "checks": [{"name": "schema_presence", "missing": ["QT_KG"]}]},
+            "quality_missing_required_columns",
+        ),
+        (
+            {"status": "blocked", "checks": [{"name": "critical_nulls", "columns": [{"column": "NUMERO_OB"}]}]},
+            "quality_critical_nulls",
+        ),
+        (
+            {"status": "blocked", "checks": [{"name": "group_key_uniqueness", "duplicate_rows": 2}]},
+            "quality_duplicate_keys",
+        ),
+        (
+            {"status": "blocked", "critical_issues": ["erro generico"]},
+            "quality_blocked",
+        ),
+    ],
+)
+def test_todos_subcodigos_quality_blocked_geram_snapshot_state_invalid_sem_duplicar_issue(
+    tmp_path: Path, quality_payload: dict[str, Any], expected_code: str
+) -> None:
+    ctx = _context(tmp_path, quality=quality_payload)
+    assert ctx["reason_code"] == expected_code
+    assert ctx["snapshot_state"] == "invalid"
+    codes = [issue["code"] for issue in ctx["issues"]]
+    assert codes == [expected_code]
+
+    periods = {
+        "diario": _envelope(tmp_path, "diario", "Diário", quality=quality_payload),
+        "mensal": _envelope(tmp_path, "mensal", "Mensal"),
+    }
+    health = _build_health_from_periods(periods)
+    assert health["summary"]["invalid_periods"] == 1
+
+
+def test_assess_quality_zero_linhas_com_schema_valido_alcanca_no_data(
+    tmp_path: Path,
+) -> None:
+    columns = list(DETAILED_REQUIRED_COLUMNS)
+    profiles = profile_rows(columns, [], sample_limit=3)
+    profile = summarize_profiles(profiles, 0, {})
+    quality = assess_quality("diario", profile, [])
+
+    assert quality["status"] == "no_data"
+    ctx = _context(tmp_path, metrics={"linhas": 0}, quality=quality)
+    assert ctx["status"] == "no_data"
+    assert ctx["reason_code"] == "snapshot_no_data"
+
+
+def test_assess_quality_zero_linhas_sem_coluna_obrigatoria_segue_blocked(
+    tmp_path: Path,
+) -> None:
+    quality = assess_quality(
+        "diario", {"total_rows": 0, "total_columns": 0, "columns": []}, []
+    )
+    assert quality["status"] == "blocked"
+    ctx = _context(tmp_path, metrics={"linhas": 0}, quality=quality)
+    assert ctx["status"] == "attention"
+    assert ctx["reason_code"] == "quality_missing_required_columns"
+    assert ctx["snapshot_state"] == "invalid"

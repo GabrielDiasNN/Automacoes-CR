@@ -21,6 +21,7 @@ from promovidas import (
     carregar_config,
     extrair_chave,
     filtrar_excecoes,
+    run_promocao,
 )
 from promovidas.card import gerar_artefatos_whatsapp
 from promovidas.estado import gravar_estado, ler_estado, selecionar_pendentes
@@ -407,3 +408,120 @@ def test_config_rejeita_consulta_rooted_e_card_pagina_por_tamanho(
     assert len(manifest) >= 2
     assert all("consulte os logs" not in entry["caption"] for entry in manifest)
     assert sum(len(entry["ob_ids"]) for entry in manifest) == 11
+
+
+@pytest.mark.unitario
+def test_regras_rejeita_nao_finitos_e_compara_numericamente_eq_ne_in() -> None:
+    rows: list[dict[str, Any]] = [
+        {"COD": 0.0, "VAL": float("nan")},
+        {"COD": "1.50", "VAL": float("inf")},
+        {"COD": 2, "VAL": 10},
+    ]
+    assert [
+        r["COD"]
+        for r in filtrar_excecoes(rows, [CondicaoFiltro("COD", "eq", 0)])
+    ] == [0.0]
+    assert [
+        r["COD"]
+        for r in filtrar_excecoes(rows, [CondicaoFiltro("COD", "ne", "0")])
+    ] == ["1.50", 2]
+    assert [
+        r["COD"]
+        for r in filtrar_excecoes(rows, [CondicaoFiltro("COD", "in", [1.5, "2.0"])])
+    ] == ["1.50", 2]
+    assert [
+        r["COD"]
+        for r in filtrar_excecoes(rows, [CondicaoFiltro("COD", "not_in", [0, 1.5])])
+    ] == [2]
+    # NaN/inf ignorados em comparacoes e KPIs
+    assert filtrar_excecoes(rows, [CondicaoFiltro("VAL", "gt", 0)]) == [
+        {"COD": 2, "VAL": 10}
+    ]
+    assert calcular_kpis(rows, ["sum:VAL", "min:VAL", "max:VAL"]) == {
+        "sum:VAL": 10.0,
+        "min:VAL": 10.0,
+        "max:VAL": 10.0,
+    }
+
+
+@pytest.mark.unitario
+def test_despachar_excecoes_limpa_chaves_resolvidas_em_estado_fora_dry_run(
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg_exemplo(tmp_path, modo="sombra")
+    spec = hr.AutomationSpec(
+        automacao=cfg.nome,
+        slug=cfg.slug,
+        trace_slug=cfg.slug,
+        lock_key="TEST",
+        log_dir=tmp_path / "Logs",
+        non_failure_codes=(0, 2, 22),
+    )
+    ctx = hr.create_run_context(spec, exec_id="TEST-CLEAN", project_root=tmp_path)
+    state_path = tmp_path / "seen_state.json"
+    agora_iso = datetime.now(UTC).isoformat()
+    gravar_estado(state_path, {"100": agora_iso, "200": agora_iso}, exec_id="OLD")
+
+    # Dry-run nao limpa seen_state.json
+    assert _despachar_excecoes(ctx, cfg, tmp_path, [], dry_run=True) == 0
+    assert set(ler_estado(state_path).keys()) == {"100", "200"}
+
+    # Com "200" ainda dentro do TTL e "100" resolvida, persiste remocao de "100"
+    assert (
+        _despachar_excecoes(
+            ctx, cfg, tmp_path, [{"NUMERO_OB": "200"}], dry_run=False
+        )
+        == 0
+    )
+    assert set(ler_estado(state_path).keys()) == {"200"}
+
+    # Com 0 excecoes, limpa tambem a "200"
+    assert _despachar_excecoes(ctx, cfg, tmp_path, [], dry_run=False) == 0
+    assert ler_estado(state_path) == {}
+
+
+@pytest.mark.unitario
+def test_run_promocao_lock_timeout_encerra_telemetria_com_finish(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_path = tmp_path / "promocao.json"
+    cfg_path.write_text(
+        json.dumps(
+            {
+                "slug": "teste-lock",
+                "nome": "Teste Lock",
+                "consulta": "consulta.sql",
+                "modo": "sombra",
+                "chave": ["ID"],
+                "destinos": ["dashboard"],
+                "painel": {"titulo": "T"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class _MutexTravado:
+        def __init__(self, *_a: Any, **_k: Any) -> None:
+            pass
+
+        def __enter__(self) -> None:
+            raise hr.LockTimeoutError("mutex ocupado")
+
+        def __exit__(self, *_a: Any) -> None:
+            return None
+
+    finishes: list[tuple[int, str]] = []
+
+    def _fake_finish(_ctx: Any, code: int, msg: str = "", **_k: Any) -> int:
+        finishes.append((code, msg))
+        return code
+
+    monkeypatch.setattr(hr, "AutomationMutex", _MutexTravado)
+    monkeypatch.setattr(hr, "load_env_file", lambda *_a: None)
+    monkeypatch.setattr(hr, "default_telemetry", lambda *_a: None)
+    monkeypatch.setattr(hr, "finish", _fake_finish)
+
+    assert run_promocao.main(["--config", str(cfg_path)]) == 0
+    assert len(finishes) == 1
+    assert finishes[0][0] == 0
+    assert "mutex ocupado" in finishes[0][1]

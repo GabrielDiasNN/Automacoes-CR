@@ -494,3 +494,100 @@ def test_sinal_legado_sem_sondagem_conta_como_vivo(
     info = oracle_queue.check_worker_liveness(str(tmp_path), probe_signal_seconds=0.0)
     assert info["source"] == "signal"
     assert info["alive"] is True
+
+
+def test_sweep_orphans_ignora_remocao_concorrente_e_atualiza_last_sweep_ao_fim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    velha = tmp_path / "res_velha.csv"
+    velha.write_bytes(b"x")
+    antigo = time.time() - oracle_queue.ORPHAN_MAX_AGE_SECONDS - 60
+    os.utime(velha, (antigo, antigo))
+
+    def _stat_sumida() -> Any:
+        raise FileNotFoundError("removida concorrentemente")
+
+    entrada_sumida = SimpleNamespace(
+        name="res_sumida.csv",
+        path=str(tmp_path / "res_sumida.csv"),
+        stat=_stat_sumida,
+    )
+    entrada_velha = SimpleNamespace(
+        name="res_velha.csv",
+        path=str(velha),
+        stat=lambda: os.stat(str(velha)),
+    )
+
+    class _Scan:
+        def __enter__(self) -> list[Any]:
+            return [entrada_sumida, entrada_velha]
+
+        def __exit__(self, *_a: Any) -> None:
+            return None
+
+    monkeypatch.setattr(os, "scandir", lambda _p: _Scan())
+    acessar_privado(oracle_queue, "_sweep_orphans")(str(tmp_path))
+    assert not velha.exists()
+    assert str(tmp_path) in acessar_privado(oracle_queue, "_last_sweep")
+
+    # Se scandir falhar com OSError, _last_sweep nao deve ser atualizado
+    monkeypatch.setattr(oracle_queue, "_last_sweep", {})
+    monkeypatch.setattr(
+        os,
+        "scandir",
+        lambda _p: (_ for _ in ()).throw(OSError("share caiu")),
+    )
+    acessar_privado(oracle_queue, "_sweep_orphans")(str(tmp_path))
+    assert not acessar_privado(oracle_queue, "_last_sweep")
+
+
+def test_collect_worker_health_snapshot_padroniza_13_chaves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    esperadas = {
+        "enabled",
+        "alive",
+        "reachable",
+        "source",
+        "age_seconds",
+        "state",
+        "oracle_ok",
+        "version",
+        "machine",
+        "req_id",
+        "pending_requests",
+        "active_procs",
+        "error",
+    }
+
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "auto")
+    desabilitado = oracle_queue.collect_worker_health_snapshot()
+    assert set(desabilitado) == esperadas
+    assert desabilitado["enabled"] is False
+    assert desabilitado["alive"] is None
+    assert desabilitado["reachable"] is None
+    assert desabilitado["source"] == "disabled"
+    assert desabilitado["error"] is None
+
+    monkeypatch.setenv("ORACLE_DRIVER_MODE", "queue")
+    monkeypatch.setattr(
+        oracle_queue,
+        "check_worker_liveness",
+        lambda **_k: {"alive": True, "reachable": True, "source": "heartbeat"},
+    )
+    sucesso = oracle_queue.collect_worker_health_snapshot()
+    assert set(sucesso) == esperadas
+    assert sucesso["enabled"] is True
+    assert sucesso["error"] is None
+
+    monkeypatch.setattr(
+        oracle_queue,
+        "check_worker_liveness",
+        lambda **_k: (_ for _ in ()).throw(OSError("share offline")),
+    )
+    erro = oracle_queue.collect_worker_health_snapshot()
+    assert set(erro) == esperadas
+    assert erro["enabled"] is True
+    assert erro["alive"] is False
+    assert erro["source"] == "error"
+    assert "share offline" in str(erro["error"])

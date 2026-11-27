@@ -47,6 +47,16 @@ def _d(acao: str, motivo: str) -> dict[str, str]:
     return {"acao": acao, "motivo": motivo}
 
 
+def _status_validacao(validar: dict[str, Any]) -> Any:
+    """Status do payload `oracle-sql-validation/v2` (`results[0].status`) ou legado."""
+    results = validar.get("results")
+    if isinstance(results, list) and results:
+        primeiro = results[0]
+        if isinstance(primeiro, dict) and "status" in primeiro:
+            return primeiro.get("status")
+    return validar.get("status")
+
+
 def _evidencia_basica(
     prefixo: Path, sql_wt: Path
 ) -> tuple[dict[str, str] | None, tuple[dict[str, Any], dict[str, Any]] | None]:
@@ -63,7 +73,7 @@ def _evidencia_basica(
     wt = _ler_json(Path(f"{prefixo}-wt-medicao.json"))
     if validar is None or head is None or wt is None:
         return _d("pendente", "evidência de validação ou medição ausente"), None
-    if validar.get("status") != "validated":
+    if _status_validacao(validar) != "validated":
         return _d("reverter_head", "versão de trabalho não passa parse/smoke"), None
     resumo_head, resumo_wt = head.get("summary"), wt.get("summary")
     if not resumo_head or not resumo_wt:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -12,18 +13,28 @@ def _como_float(valor: Any) -> float | None:
     if isinstance(valor, bool) or valor is None:
         return None
     if isinstance(valor, (int, float)):
-        return float(valor)
+        num = float(valor)
+        return num if math.isfinite(num) else None
     texto = str(valor).strip().replace(",", ".")
     if not texto:
         return None
     try:
-        return float(texto)
+        num = float(texto)
     except ValueError:
         return None
+    return num if math.isfinite(num) else None
 
 
 def _como_texto(valor: Any) -> str:
     return "" if valor is None else str(valor).strip()
+
+
+def _valores_iguais(atual: Any, alvo: Any) -> bool:
+    num_atual = _como_float(atual)
+    num_alvo = _como_float(alvo)
+    if num_atual is not None and num_alvo is not None:
+        return num_atual == num_alvo
+    return _como_texto(atual) == _como_texto(alvo)
 
 
 def _comparar_numerico(op: str, atual: Any, alvo: Any) -> bool:
@@ -44,15 +55,14 @@ def avaliar_condicao(row: Mapping[str, Any], cond: CondicaoFiltro) -> bool:
     """Avalia uma condicao isolada contra uma linha do resultado SQL."""
     atual = row.get(cond.coluna)
     if cond.op == "eq":
-        return _como_texto(atual) == _como_texto(cond.valor)
+        return _valores_iguais(atual, cond.valor)
     if cond.op == "ne":
-        return _como_texto(atual) != _como_texto(cond.valor)
+        return not _valores_iguais(atual, cond.valor)
     if cond.op in {"in", "not_in"}:
         itens = (
             cond.valor if isinstance(cond.valor, (list, tuple, set)) else [cond.valor]
         )
-        esperados = {_como_texto(item) for item in itens}
-        contido = _como_texto(atual) in esperados
+        contido = any(_valores_iguais(atual, item) for item in itens)
         return contido if cond.op == "in" else not contido
     return _comparar_numerico(cond.op, atual, cond.valor)
 

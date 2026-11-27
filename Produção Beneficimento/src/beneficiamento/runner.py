@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -66,7 +66,7 @@ def _build_snapshot_payloads_from_result(
     analytics["qualidade"] = assess_quality(period, profile, records)
     analytics["snapshot"] = {
         "period": period,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
     return profile, analytics, records
 
@@ -83,7 +83,10 @@ def _classify_refresh_status(
     ) or {}
     if quality_status in {"attention", "blocked"}:
         return "attention"
-    if oracle_meta.get("oracle_timeout_applied") is False:
+    if (
+        oracle_meta.get("oracle_timeout_applied") is False
+        and oracle_meta.get("queue") is not True
+    ):
         return "attention"
     return "ok"
 

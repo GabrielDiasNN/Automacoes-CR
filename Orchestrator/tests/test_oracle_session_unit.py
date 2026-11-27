@@ -387,3 +387,68 @@ def test_query_deadline_nao_marca_disparo_em_erro_comum() -> None:
     ):
         raise oracledb.DatabaseError("ORA-00942: tabela ou view nao existe")
     assert not disparou.is_set()
+
+
+def test_cancel_after_nao_chama_ping_quando_cancel_travar_alem_do_prazo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(oracle_session, "CANCEL_GRACE_SECONDS", 0.05)
+    liberar = threading.Event()
+
+    class ConexaoTravada:
+        def __init__(self) -> None:
+            self.pings = 0
+
+        def cancel(self) -> None:
+            liberar.wait(timeout=3)
+
+        def ping(self) -> None:
+            self.pings += 1
+
+    conexao = ConexaoTravada()
+    disparou = threading.Event()
+    try:
+        with oracle_session.cancel_after(conexao, 0.05, disparou):
+            assert disparou.wait(timeout=2)
+        assert conexao.pings == 0
+    finally:
+        liberar.set()
+
+
+def test_cancel_after_suprime_erro_nao_oracledb_em_fire() -> None:
+    class ConexaoQuebrada:
+        def cancel(self) -> None:
+            raise RuntimeError("sessao fechada")
+
+        def ping(self) -> None:
+            raise AttributeError("sem ping")
+
+    disparou = threading.Event()
+    with oracle_session.cancel_after(ConexaoQuebrada(), 0.05, disparou):
+        assert disparou.wait(timeout=2)
+
+
+def test_run_with_cancel_nao_trava_quando_cancel_pendura(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(oracle_session, "CANCEL_GRACE_SECONDS", 0.05)
+    liberar = threading.Event()
+
+    class ConexaoTravada:
+        def cancel(self) -> None:
+            liberar.wait(timeout=5)
+
+        def close(self) -> None:
+            return None
+
+    conexao = ConexaoTravada()
+    try:
+        resultado = oracle_session.run_with_cancel(
+            lambda: liberar.wait(timeout=5),
+            lambda: conexao,
+            0.05,
+        )
+        assert resultado.timed_out is True
+        assert resultado.abandoned is True
+    finally:
+        liberar.set()

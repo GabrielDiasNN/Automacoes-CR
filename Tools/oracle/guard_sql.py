@@ -83,6 +83,10 @@ def canonical_guard_file() -> Path:
 # única da regra "só função": o texto dos motivos muda, a classe é o contrato.
 CLASSE_CHAMADA_FUNCAO = "chamada_funcao"
 
+# O guard só confere até este número de nomes na consulta de verificação de funções.
+# Acima dele não há como provar a ausência de função: os executores falham fechado.
+LIMITE_NOMES_VERIFICADOS = 500
+
 
 def ler_veredito(saida: str) -> dict[str, Any]:
     """Veredito JSON impresso pelo guard. ValueError se não for um objeto JSON."""
@@ -90,6 +94,22 @@ def ler_veredito(saida: str) -> dict[str, Any]:
     if not isinstance(veredito, dict):
         raise ValueError("saída do guard não é um objeto JSON")
     return veredito
+
+
+def extrair_consulta_verificacao(veredito: Mapping[str, Any]) -> str | None:
+    """Devolve `consulta_verificacao` se o número de objetos estiver dentro do limite.
+
+    Levanta `ValueError` quando `len(verificar_objetos) > LIMITE_NOMES_VERIFICADOS`
+    (fail-closed: o canônico trunca o `IN (...)` em 500 nomes).
+    """
+    objetos = veredito.get("verificar_objetos") or ()
+    if len(objetos) > LIMITE_NOMES_VERIFICADOS:
+        raise ValueError(
+            f"a consulta cita {len(objetos)} nomes; a verificação "
+            f"de funções aceita até {LIMITE_NOMES_VERIFICADOS} (fail-closed)."
+        )
+    consulta = veredito.get("consulta_verificacao")
+    return str(consulta) if consulta else None
 
 
 def so_chamada_de_funcao(veredito: dict[str, Any]) -> bool:
@@ -134,27 +154,31 @@ def load_canonical() -> Any:
 
 # CTEs recursivas ANSI no Oracle 11g+/12c exigem lista explícita de colunas:
 # "nome_cte (col1, col2) AS (". O guard original considera qualquer
-# "identificador(" como chamada de função do usuário. Esta normalização
-# preserva a semântica da CTE sem disparar falso positivo de função.
+# "identificador(" como chamada de função do usuário. Esta normalização roda
+# somente após remover literais/comentários, ancorada em WITH ou vírgula e
+# aceitando apenas identificadores separados por vírgula entre parênteses.
 _CTE_COLUMN_LIST = re.compile(
-    r"([A-Za-z_][\w$#]*)\s*\([^)]*\)\s+AS\s*\(", flags=re.IGNORECASE
+    r"(\bWITH\s+|,\s*)([A-Za-z_][\w$#]*)\s*\(\s*[A-Za-z_][\w$#]*(?:\s*,\s*[A-Za-z_][\w$#]*)*\s*\)\s*(AS\s*\()",
+    flags=re.IGNORECASE,
 )
 
 
 def normalize_cte_column_lists(sql: str) -> str:
-    return _CTE_COLUMN_LIST.sub(r"\1 AS (", sql)
+    return _CTE_COLUMN_LIST.sub(r"\1\2 \3", sql)
 
 
 def patch_canonical(canonical: Any) -> Any:
-    original = canonical.classificar
+    if getattr(
+        canonical.remover_literais_e_comentarios, "__qualname__", ""
+    ).startswith("patch_canonical."):
+        return canonical
+    original = canonical.remover_literais_e_comentarios
 
-    def patched(sql: str, exigir_limite: bool = False) -> dict[str, Any]:
-        resultado: dict[str, Any] = original(
-            normalize_cte_column_lists(sql), exigir_limite
-        )
-        return resultado
+    def patched(sql: str, citados: list[str] | None = None) -> str:
+        limpo: str = original(sql, citados)
+        return normalize_cte_column_lists(limpo)
 
-    canonical.classificar = patched
+    canonical.remover_literais_e_comentarios = patched
     return canonical
 
 

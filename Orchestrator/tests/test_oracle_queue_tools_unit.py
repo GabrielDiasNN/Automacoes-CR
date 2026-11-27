@@ -9,7 +9,7 @@ from typing import Any
 
 import oracle_queue
 import pytest
-from oracle_queue import QueueResult
+from oracle_queue import OracleQueueTimeoutError, QueueResult
 from tests.carregadores_modulos import carregar_tool_oracle as _carregar
 
 # oracle_queue_tools faz `from guard_sql import ...`, e Tools/oracle não está no
@@ -82,7 +82,7 @@ def test_prazo_global_vencido_nao_chama_a_fila(
 ) -> None:
     monkeypatch.setenv(PRAZO_ENV, str(time.time() - 5))
 
-    with pytest.raises(TimeoutError, match="ORACLE_QUEUE_DEADLINE_EPOCH"):
+    with pytest.raises(OracleQueueTimeoutError, match="ORACLE_QUEUE_DEADLINE_EPOCH"):
         oqt.executar_consulta_fila(SQL, timeout=300)
 
     assert timeouts == []

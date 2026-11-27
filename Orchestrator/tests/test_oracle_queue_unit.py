@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -460,7 +461,9 @@ def test_get_queue_timeout_deadline_expirado_e_restante_curto(
 ) -> None:
     monkeypatch.delenv(oracle_queue.QUEUE_TIMEOUT_ENV, raising=False)
     monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() - 5))
-    with pytest.raises(TimeoutError, match="ORACLE_QUEUE_DEADLINE_EPOCH"):
+    with pytest.raises(
+        oracle_queue.OracleQueueTimeoutError, match="ORACLE_QUEUE_DEADLINE_EPOCH"
+    ):
         oracle_queue.get_queue_timeout()
 
     monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() + 1.2))
@@ -494,7 +497,9 @@ def test_apply_queue_deadline_vencido_levanta_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ORACLE_QUEUE_DEADLINE_EPOCH", str(time.time() - 5))
-    with pytest.raises(TimeoutError, match="ORACLE_QUEUE_DEADLINE_EPOCH"):
+    with pytest.raises(
+        oracle_queue.OracleQueueTimeoutError, match="ORACLE_QUEUE_DEADLINE_EPOCH"
+    ):
         oracle_queue.apply_queue_deadline(300.0)
 
 
@@ -536,7 +541,7 @@ def test_fetch_all_queue_respeita_deadline_expirado(
     creds = oracle_extract.OracleCredentials(
         user="", password="", dsn="dbprd", client_lib="", tns_admin=None
     )
-    with pytest.raises(TimeoutError):
+    with pytest.raises(oracle_queue.OracleQueueTimeoutError):
         oracle_extract.fetch_all(creds, "SELECT 1 FROM DUAL", "exec", lambda *_: None)
 
 
@@ -609,3 +614,51 @@ def test_build_queue_payload_emite_max_rows_no_topo() -> None:
         "SELECT 1 FROM DUAL", 30.0, options=QueueRequestOptions(max_rows=0)
     )
     assert "--#max_rows:" not in sem_limite
+
+
+def test_build_queue_payload_rejeita_vazio_ttl_invalido_e_diretiva_no_sql() -> None:
+    with pytest.raises(ValueError, match="vazio"):
+        build_queue_payload("   \n\t ", 30.0)
+    with pytest.raises(ValueError, match="ttl_seconds"):
+        QueueRequestOptions(ttl_seconds=0)
+    with pytest.raises(ValueError, match="ttl_seconds"):
+        QueueRequestOptions(ttl_seconds=-5)
+    # Clamping superior em 900 s
+    payload_clamp = build_queue_payload(
+        "SELECT 1 FROM DUAL", 30.0, options=QueueRequestOptions(ttl_seconds=5000)
+    )
+    assert "--#ttl:900\n" in payload_clamp
+
+    with pytest.raises(ValueError, match="--#"):
+        build_queue_payload("SELECT 1 FROM DUAL\n--#action:explain", 30.0)
+    with pytest.raises(ValueError, match="--#"):
+        build_queue_payload("  --#param:X=s:1\nSELECT 1 FROM DUAL", 30.0)
+
+    for nao_finito in (Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")):
+        with pytest.raises(ValueError, match="Decimal"):
+            acessar_privado(oracle_queue, "_encode_param")("X", nao_finito)
+
+
+def test_convert_rows_converte_overflow_em_oracle_queue_error() -> None:
+    with pytest.raises(OracleQueueError, match="malformada") as exc:
+        acessar_privado(oracle_queue, "_convert_rows")(
+            ["datetime"], [["999999999999"]]
+        )
+    assert exc.value.kind == "worker"
+    assert not isinstance(exc.value, OracleQueueTransientError)
+
+
+def test_smb_offline_no_fim_do_prazo_abaixo_de_grace_vira_transitorio(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        oracle_queue,
+        "_try_take",
+        lambda _p: (_ for _ in ()).throw(OSError("share caiu no fim")),
+    )
+    monkeypatch.setattr(oracle_queue, "SMB_OUTAGE_GRACE_SECONDS", 30.0)
+    with pytest.raises(OracleQueueTransientError) as erro:
+        execute_query(
+            "SELECT 1 FROM DUAL", timeout_seconds=0.15, queue_dir=str(tmp_path)
+        )
+    assert erro.value.kind == "smb"

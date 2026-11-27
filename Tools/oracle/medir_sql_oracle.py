@@ -50,7 +50,7 @@ from oracle_extract import (
     resolve_oracle_credentials,
     serialize_rows,
 )
-from oracle_queue import OracleQueueError
+from oracle_queue import OracleQueueTransientError
 from oracle_queue_tools import (
     ERROS_FILA,
     QUEUE_MODE_SENTINEL,
@@ -155,7 +155,8 @@ def _unique_names(names: list[str]) -> list[str]:
 
 def _failure(exc: BaseException) -> dict[str, Any]:
     message = _error_summary(exc)
-    status = "transient" if is_transient(message) else "error"
+    transient = isinstance(exc, OracleQueueTransientError) or is_transient(message)
+    status = "transient" if transient else "error"
     return {"status": status, "error": message}
 
 
@@ -290,7 +291,7 @@ def _attempt_queue(
         }
     except TimeoutError:
         return {"status": "timeout"}
-    except OracleQueueError as exc:
+    except ERROS_FILA as exc:
         return _failure(exc)
 
 
@@ -402,6 +403,7 @@ def explain_plan(
     creds: Any, sql: str, binds: dict[str, Any], timeout: float = DEFAULT_TIMEOUT
 ) -> list[str]:
     """Plano estimado (EXPLAIN PLAN + DBMS_XPLAN.DISPLAY): hipótese, não métrica."""
+    _ = binds  # EXPLAIN PLAN FOR no Oracle não aceita bind variables OCI
     if creds is QUEUE_MODE_SENTINEL:
         try:
             linhas, _ = explicar_plano_fila(
@@ -418,9 +420,17 @@ def explain_plan(
 
     def _plan() -> list[str]:
         cursor = connection.cursor()
-        cursor.execute("EXPLAIN PLAN FOR " + sql, binds)
-        cursor.execute("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY())")
-        return [str(row[0]) for row in cursor.fetchall()]
+        try:
+            cursor.execute("EXPLAIN PLAN FOR " + sql)
+            cursor.execute("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY())")
+            return [str(row[0]) for row in cursor.fetchall()]
+        finally:
+            if hasattr(connection, "rollback"):
+                with contextlib.suppress(oracledb.Error):
+                    connection.rollback()
+            if hasattr(cursor, "close"):
+                with contextlib.suppress(oracledb.Error):
+                    cursor.close()
 
     # Sem `call_timeout` no Client 12.2: o plano também roda sob watchdog.
     # Conexão e plano dividem o mesmo `--timeout`.
@@ -585,16 +595,9 @@ def _excecao_funcoes(
     }
 
 
-def verificar_funcoes_no_oracle(
-    creds: Any, consulta: str | None, timeout: float
+def _verificar_funcoes_uma_vez(
+    creds: Any, consulta: str, timeout: float
 ) -> str | None:
-    """Roda a `consulta_verificacao` do guard numa conexão própria, sob watchdog.
-
-    Devolve o motivo do bloqueio quando algum nome é função/pacote/tipo, ou None.
-    Prazo estourado ou erro do banco levantam: sem a prova, nada é medido.
-    """
-    if consulta is None:
-        return None
     if creds is QUEUE_MODE_SENTINEL:
         motivo_fila = verificar_objetos_fila(
             consulta, timeout=timeout, exec_id="MEDIR_GUARD"
@@ -602,8 +605,19 @@ def verificar_funcoes_no_oracle(
         return str(motivo_fila) if motivo_fila is not None else None
     started = time.perf_counter()
     connection = connect_within(lambda: _connect(creds), timeout)
+
+    def _run() -> str | None:
+        cursor = connection.cursor()
+        try:
+            motivo: str | None = verificar_objetos(cursor, consulta)
+            return motivo
+        finally:
+            if hasattr(cursor, "close"):
+                with contextlib.suppress(oracledb.Error):
+                    cursor.close()
+
     outcome = run_with_cancel(
-        lambda: verificar_objetos(connection.cursor(), consulta),
+        _run,
         lambda: connection,
         timeout - (time.perf_counter() - started),
     )
@@ -616,6 +630,29 @@ def verificar_funcoes_no_oracle(
         raise outcome.error
     motivo: str | None = outcome.value
     return motivo
+
+
+def verificar_funcoes_no_oracle(
+    creds: Any, consulta: str | None, timeout: float
+) -> str | None:
+    """Roda a `consulta_verificacao` do guard numa conexão própria, sob watchdog.
+
+    Devolve o motivo do bloqueio quando algum nome é função/pacote/tipo, ou None.
+    Repete falhas transitórias até `MAX_ATTEMPTS`; prazo estourado ou erro final
+    levantam: sem a prova, nada é medido.
+    """
+    if consulta is None:
+        return None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            return _verificar_funcoes_uma_vez(creds, consulta, timeout)
+        except OracleQueueTransientError:
+            if attempt >= MAX_ATTEMPTS:
+                raise
+        except (oracledb.Error, OSError) as exc:
+            if attempt >= MAX_ATTEMPTS or not is_transient(_error_summary(exc)):
+                raise
+    raise AssertionError("inalcançável")
 
 
 def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
@@ -634,7 +671,9 @@ def _prepare(args: argparse.Namespace) -> tuple[str, dict[str, Any], Any]:
         try:
             args.consulta_verificacao = consulta_verificacao_do_guard(guard_output)
         except ValueError as exc:
-            raise SystemExit(f"veredito do guard ilegível: {guard_output}") from exc
+            raise SystemExit(
+                f"guard_sql.py recusou ou retornou veredito inválido: {exc}"
+            ) from exc
     else:
         args.excecao_guard = _excecao_funcoes(
             guard_code,
@@ -683,9 +722,14 @@ def main() -> int:
     args = _build_parser().parse_args()
     sql, binds, creds = _prepare(args)
     # Antes da primeira execução: função sem parênteses (`PKG.FN`) passa no guard.
-    motivo = verificar_funcoes_no_oracle(
-        creds, getattr(args, "consulta_verificacao", None), args.timeout
-    )
+    try:
+        motivo = verificar_funcoes_no_oracle(
+            creds, getattr(args, "consulta_verificacao", None), args.timeout
+        )
+    except (oracledb.Error, TimeoutError, *ERROS_FILA) as exc:
+        raise SystemExit(
+            f"verificação de funções no Oracle falhou: {_error_summary(exc)}"
+        ) from exc
     if motivo is not None:
         raise SystemExit(f"SQL bloqueado: {motivo}")
     options = MeasureOptions(
