@@ -128,6 +128,81 @@ foreach ($fullPath in $resolvedTargetFiles) {
 
 $mypy = Get-PythonTool "mypy"
 $pylint = Get-PythonTool "pylint"
+$black = Get-PythonTool "black"
+$isort = Get-PythonTool "isort"
+$bandit = Get-PythonTool "bandit"
+$ruff = Get-PythonTool "ruff"
+
+$diffPyFiles = @()
+if ($LintChangedOnly) {
+    $diffPyFiles = @(
+        $LintScopePaths |
+            Where-Object { $_ -match '\.py$' } |
+            ForEach-Object {
+                $rel = $_.Trim('"')
+                $full = Join-Path $RootPath $rel
+                if (Test-Path -LiteralPath $full) { (Resolve-Path -LiteralPath $full).Path }
+            } |
+            Sort-Object -Unique
+    )
+} elseif ($Paths.Count -gt 0) {
+    $diffPyFiles = @($resolvedTargetFiles)
+}
+
+if ($diffPyFiles.Count -gt 0) {
+    # Black e isort rodam sobre TODOS os .py do diff (espelhando @changedFiles do CI).
+    # Ruff e Bandit rodam apenas nos escopos monitorados pelo job Lint Python do CI
+    # (exclui vendored code como lib/vendor/, que tem baseline proprio fora do gate).
+    $ciLintPrefixes = @(
+        'Orchestrator/app/', 'Orchestrator/worker.py', 'Orchestrator/tests/', 'Orchestrator/migrations/',
+        'lib/python/', 'Produção Beneficimento/src/', 'Produção Beneficimento/snapshots/',
+        'Produção Beneficimento/analise_producao_diaria_beneficiamento.py',
+        'OBs Restricao Branco/', 'Receitas Bloqueadas/', 'Montagem de Terceirizados/',
+        'Receitas Emitidas/', 'OBs Paradas Fase/', 'OBs Fluxo Sem Tingimento/',
+        '.claude/skills/', 'Tools/', 'docs/templates/', 'docs/oracle-schema/consultas/'
+    )
+    $normalizedRootForLint = ($RootPath -replace '/', '\').TrimEnd('\')
+    $ciLintFiles = @(
+        $diffPyFiles | Where-Object {
+            $relPosix = ($_ -replace '/', '\').Substring($normalizedRootForLint.Length).TrimStart('\') -replace '\\', '/'
+            $matchPrefix = $false
+            foreach ($prefix in $ciLintPrefixes) {
+                if ($prefix.EndsWith('/')) {
+                    if ($relPosix.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) { $matchPrefix = $true; break }
+                } elseif ($relPosix.Equals($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $matchPrefix = $true; break
+                }
+            }
+            $matchPrefix
+        }
+    )
+
+    $diffLinters = @(
+        @{ Name = "Black";  Exe = $black;  Args = @("--check");      Files = $diffPyFiles },
+        @{ Name = "Isort";  Exe = $isort;  Args = @("--check-only"); Files = $diffPyFiles },
+        @{ Name = "Ruff";   Exe = $ruff;   Args = @("check");        Files = $ciLintFiles },
+        @{ Name = "Bandit"; Exe = $bandit; Args = @("-ll", "-q");    Files = $ciLintFiles }
+    )
+    foreach ($linter in $diffLinters) {
+        if ($linter.Files.Count -eq 0) { continue }
+        if (-not $linter.Exe) {
+            Write-Host "[AVISO] $($linter.Name) nao instalado. Validacao no diff pulada." -ForegroundColor Yellow
+            continue
+        }
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $linterOut = & $linter.Exe @($linter.Args) @($linter.Files) 2>&1
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERRO] Falha de $($linter.Name) no diff ($($linter.Files.Count) arquivo(s))" -ForegroundColor Red
+            $linterOut | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+            $hasErrors = $true
+        }
+    }
+}
 
 # Arquivos do pylint. Sem -LintChangedOnly: todo o alvo (CI, modo direcionado).
 # Com -LintChangedOnly: os .py alterados mais os dependentes diretos, isto e', os
